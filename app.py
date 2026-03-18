@@ -56,7 +56,7 @@ def auditar(reporte, taf):
     return alertas
 
 # --- 2. INTERFAZ ---
-st.title("🖥️ Monitor de Despacho OPMET")
+st.title("🖥️ Monitor vigilancia FIR SAVC ad nac & int")
 st.write(f"Última lectura: **{datetime.now().strftime('%H:%M:%S')}**")
 
 cols = st.columns(2)
