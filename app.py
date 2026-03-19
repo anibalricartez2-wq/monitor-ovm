@@ -75,7 +75,7 @@ st.write(f"Última sincronización: **{ahora}**")
 
 datos_raw = obtener_datos_checkwx(AERODROMOS)
 
-reportes = {icao: "Esperando reinicio (00:00utc hs)..." for icao in AERODROMOS}
+reportes = {icao: "Esperando reinicio (00:00 UTC)..." for icao in AERODROMOS}
 nuevos_logs = []
 
 for metar in datos_raw:
@@ -110,4 +110,4 @@ if not st.session_state.historial.empty:
     csv = st.session_state.historial.to_csv(index=False).encode('utf-8')
     st.download_button(label="📥 Descargar CSV", data=csv, file_name=f"trazabilidad_{datetime.now().strftime('%d-%m-%Y')}.csv", mime="text/csv")
 else:
-    st.info("El registro comenzará a las 21:00 hs.")
+    st.info("El registro comenzará a las 00:00 UTC hs.")
