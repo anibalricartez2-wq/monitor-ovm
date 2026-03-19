@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
-import re
-import pandas as pd
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
@@ -16,64 +15,46 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 # Refresco cada 10 min
 st_autorefresh(interval=600000, key="datarefresh")
 
-# --- 2. LÓGICA DE DATOS (CON SALTADOR DE BLOQUEO) ---
-def get_smn_proxy():
-    """Usa un proxy para que el SMN no bloquee al servidor de Streamlit."""
-    url_directa = "https://www.smn.gob.ar/adjuntos/metar.txt"
-    # Este proxy actúa como intermediario para evitar el bloqueo de red
-    proxy_url = f"https://api.allorigins.win/get?url={url_directa}"
-    
+# --- 2. LÓGICA DE DATOS INTERNACIONAL (NOAA ADDS) ---
+def get_noaa_data(icao):
+    """Obtiene METAR de la base de datos global de aviación (EE.UU.)."""
     try:
-        response = requests.get(proxy_url, timeout=20)
+        url = f"https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString={icao}&hoursBeforeNow=2"
+        response = requests.get(url, timeout=15)
         if response.status_code == 200:
-            # El proxy devuelve un JSON, extraemos el texto del SMN
-            data = response.json()
-            return data.get('contents', "")
+            root = ET.fromstring(response.content)
+            # Buscamos el texto del METAR en el XML
+            metar_element = root.find(".//raw_text")
+            if metar_element is not None:
+                return metar_element.text
     except Exception as e:
-        return f"ERROR_RED: {str(e)}"
-    return None
-
-def buscar_reporte(icao, bloque):
-    if not bloque or "ERROR_RED" in bloque: return "Falla de enlace"
-    
-    lineas = bloque.split('\n')
-    for linea in lineas:
-        if icao.upper() in linea.upper():
-            return linea.strip().replace('\r', '')
-    return "No reportado"
+        return f"Error técnico: {str(e)}"
+    return "No disponible en red internacional"
 
 # --- 3. INTERFAZ ---
-st.title("🖥️ Vigilancia FIR SAVC (Enlace Emergencia)")
-st.write(f"Actualización vía Proxy: **{datetime.now().strftime('%H:%M:%S')}**")
+st.title("🖥️ Vigilancia FIR SAVC (Red Global ADDS)")
+st.write(f"Sincronizado con Servidor Global: **{datetime.now().strftime('%H:%M:%S')}**")
 
-if st.button("🔄 Refrescar ahora"):
+if st.button("🔄 Forzar Refresco"):
     st.rerun()
 
 st.divider()
 
-# Obtenemos los datos con el saltador de bloqueo
-datos_smn = get_smn_proxy()
-
 cols = st.columns(2)
 
 for i, icao in enumerate(AERODROMOS):
-    metar = buscar_reporte(icao, datos_smn)
+    metar = get_noaa_data(icao)
     
     with cols[i % 2]:
         with st.expander(f"📍 {icao}", expanded=True):
-            if metar == "Falla de enlace":
-                st.error("❌ Error de red (Servidor SMN bloqueado)")
-            elif metar == "No reportado":
-                st.info("⚪ Sin reporte actual")
+            if "Error" in metar:
+                st.error("❌ Falla de conexión con el servidor global.")
+            elif "No disponible" in metar:
+                st.info(f"⚪ {icao}: Sin reporte en circuito internacional.")
             else:
                 if "SPECI" in metar:
                     st.warning(f"🔔 {metar}")
                 else:
                     st.success(f"✅ {metar}")
 
-# PANEL DE CONTROL (Solo para verificar si llega algo)
-with st.expander("🛠️ Ver qué está llegando del SMN"):
-    if datos_smn:
-        st.text_area("Datos recibidos:", datos_smn[:1000], height=150)
-    else:
-        st.write("No se recibió nada aún.")
+st.info("ℹ️ Esta fuente es la NOAA (EE.UU.). Si un aeródromo local no figura, es porque el SMN no exportó el dato al mundo.")
