@@ -1,78 +1,47 @@
 import streamlit as st
 import requests
-import re
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. CONFIGURACIÓN ---
-st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
-
+st.set_page_config(page_title="Vigilancia FIR SAVC - EMERGENCIA", page_icon="✈️", layout="wide")
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-# Estética original
-hide_st_style = """<style>.stDeployButton {display:none;} footer {visibility: hidden;} .block-container {padding-top: 1.5rem;}</style>"""
-st.markdown(hide_st_style, unsafe_allow_html=True)
+# Refresco automático cada 15 minutos (para no saturar)
+st_autorefresh(interval=900000, key="emergencia_refresh")
 
-# Refresco cada 10 min
-st_autorefresh(interval=600000, key="datarefresh")
-
-# --- 2. LÓGICA DE DATOS (EL MOTOR QUE FUNCIONABA) ---
-def obtener_bloque_smn():
-    """Llamada al archivo original del SMN usando un puente para evitar bloqueos."""
-    url_smn = "https://www.smn.gob.ar/adjuntos/metar.txt"
-    # Usamos allorigins para saltar el firewall del SMN que bloquea a Streamlit
-    proxy_url = f"https://api.allorigins.win/get?url={url_smn}"
-    
+# --- 2. MOTOR DE DATOS (RED GLOBAL ILIMITADA) ---
+def obtener_metar_noaa(icao):
+    """Consulta la base de datos de la NOAA (EE.UU.) que es gratuita."""
     try:
-        response = requests.get(proxy_url, timeout=15)
-        if response.status_code == 200:
-            # Extraemos el contenido del JSON que devuelve el proxy
-            return response.json().get('contents', "")
-    except Exception as e:
-        return f"ERROR_RED: {str(e)}"
-    return ""
-
-def extraer_metar(icao, bloque):
-    if not bloque or "ERROR_RED" in bloque:
-        return "Falla de enlace"
-    lineas = bloque.split('\n')
-    for linea in lineas:
-        if icao.upper() in linea.upper():
-            return linea.strip().replace('\r', '')
-    return "Sin reporte actual"
+        url = f"https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString={icao}&hoursBeforeNow=2"
+        res = requests.get(url, timeout=10)
+        root = ET.fromstring(res.content)
+        metar_node = root.find(".//raw_text")
+        return metar_node.text if metar_node is not None else "Sin reporte"
+    except:
+        return "Error de conexión"
 
 # --- 3. INTERFAZ ---
-st.title("🖥️ Vigilancia FIR SAVC (Modo Restaurado)")
-st.write(f"Última lectura: **{datetime.now().strftime('%H:%M:%S')}**")
-
-if st.button("🔄 Forzar Actualización"):
-    st.rerun()
-
-st.divider()
-
-# Traemos el bloque de texto completo una sola vez
-datos_crudos = obtener_bloque_smn()
+st.title("🖥️ Monitor de Emergencia FIR SAVC")
+st.warning("⚠️ Modo de Contingencia Activo (Red NOAA Global)")
+st.write(f"Sincronizado: **{datetime.now().strftime('%H:%M:%S')}**")
 
 cols = st.columns(2)
 
 for i, icao in enumerate(AERODROMOS):
-    metar = extraer_metar(icao, datos_crudos)
+    metar = obtener_metar_noaa(icao)
     
     with cols[i % 2]:
         with st.expander(f"📍 {icao}", expanded=True):
-            if metar == "Falla de enlace":
-                st.error("❌ Error de red (Servidor SMN bloqueado)")
-            elif metar == "Sin reporte actual":
-                st.info("⚪ No hay datos en el archivo del SMN")
+            if "Error" in metar or "Sin reporte" in metar:
+                st.error(f"❌ {icao}: Dato no disponible")
             else:
-                if "SPECI" in metar:
-                    st.warning(f"🔔 {metar}")
-                else:
-                    st.success(f"✅ {metar}")
+                st.success(f"✅ **{metar}**")
+                # Si el METAR tiene ráfagas (G), resaltarlo
+                if "G" in metar:
+                    st.warning("⚠️ Alerta de Ráfagas detectada")
 
-# Consola de diagnóstico para tu tranquilidad
-with st.expander("🛠️ Consola de Datos Crudos (Diagnóstico)"):
-    if datos_crudos:
-        st.text_area("Lo que llega del SMN:", datos_crudos[:1000], height=200)
-    else:
-        st.write("No se recibió información. Verificá la conexión.")
+st.divider()
+st.caption("Este modo no consume créditos de API. Ideal para uso continuo en la oficina.")
