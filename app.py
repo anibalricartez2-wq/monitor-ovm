@@ -7,24 +7,33 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# ELIMINACIÓN TOTAL DE MENÚS Y "VIEW SOURCE"
+# CSS ESPECÍFICO PARA OCULTAR "VIEW SOURCE" Y MANTENER EL MENÚ LATERAL
 st.markdown("""
     <style>
-    /* Oculta el menú de hamburguesa (tres líneas) */
+    /* Oculta el menú de hamburguesa de la derecha y el footer */
     #MainMenu {visibility: hidden;}
-    /* Oculta el footer de Streamlit */
     footer {visibility: hidden;}
-    /* Oculta el botón de Deploy y el de Ver Código en la parte superior */
     .stDeployButton {display:none;}
-    header {visibility: hidden;}
-    /* Oculta los botones de 'View Source' que aparecen en el menú de la derecha */
-    button[title="View source"] {display: none;}
-    /* Ajuste para que el contenido no quede pegado al techo */
-    .block-container {padding-top: 2rem;}
+    
+    /* BLOQUEO ESPECÍFICO DE BOTONES DE CÓDIGO (GitHub/View Source) */
+    button[title="View source"], 
+    button[title="Edit in GitHub"],
+    a[href*="github.com"] {
+        display: none !important;
+    }
+
+    /* MANTIENE VISIBLE LA FLECHA DEL MENÚ LATERAL */
+    [data-testid="stSidebarCollapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+    }
+    
+    /* Ajuste de margen para que el título no quede tapado */
+    .block-container {padding-top: 1rem;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (PANEL DE CONTROL) ---
+# --- 2. BARRA LATERAL (MENU DE PANTALLA) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
     tema = st.selectbox(
@@ -42,7 +51,7 @@ AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 # Refresco cada 15 minutos (900.000 ms)
 st_autorefresh(interval=900000, key="vigilancia_refresh")
 
-# Historial de Sesión
+# Historial de Sesión para Trazabilidad
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Estado"])
 
@@ -62,11 +71,11 @@ st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
 st.write(f"Sincronizado: **{ahora}**")
 
-# Datos
+# Obtención de datos
 datos_raw = obtener_datos_checkwx(AERODROMOS)
 
-# Procesar y guardar en historial
-reportes = {icao: "Esperando reinicio (21:00 hs)..." for icao in AERODROMOS}
+# Mapeo de reportes
+reportes = {icao: "Esperando reinicio de API (21:00 hs)..." for icao in AERODROMOS}
 nuevos_logs = []
 
 for metar in datos_raw:
@@ -81,10 +90,11 @@ for metar in datos_raw:
                 "Estado": estado
             })
 
+# Actualizar tabla de trazabilidad
 if nuevos_logs:
     st.session_state.historial = pd.concat([st.session_state.historial, pd.DataFrame(nuevos_logs)], ignore_index=True)
 
-# Tarjetas
+# Tarjetas de aeródromos
 cols = st.columns(2)
 for i, icao in enumerate(AERODROMOS):
     metar_txt = reportes[icao]
@@ -95,16 +105,16 @@ for i, icao in enumerate(AERODROMOS):
 
 st.divider()
 
-# --- 6. TRAZABILIDAD ---
-st.subheader("📊 Historial para Excel")
+# --- 6. SECCIÓN DE EXPORTACIÓN ---
+st.subheader("📊 Historial de Trazabilidad")
 if not st.session_state.historial.empty:
     st.dataframe(st.session_state.historial.tail(10), use_container_width=True)
     csv = st.session_state.historial.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 Descargar CSV",
+        label="📥 Descargar Reporte (.csv)",
         data=csv,
         file_name=f"trazabilidad_{datetime.now().strftime('%d-%m-%Y')}.csv",
         mime="text/csv",
     )
 else:
-    st.info("El registro comenzará a las 21:00 hs.")
+    st.info("El registro comenzará a las 21:00 hs cuando se reactive el cupo de la API.")
