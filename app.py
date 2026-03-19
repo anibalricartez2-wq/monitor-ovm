@@ -10,62 +10,70 @@ st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout=
 
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-# Estética limpia
 hide_st_style = """<style>.stDeployButton {display:none;} footer {visibility: hidden;} .block-container {padding-top: 1.5rem;}</style>"""
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# Refresco cada 15 min
-st_autorefresh(interval=900000, key="datarefresh")
+# Refresco cada 10 min
+st_autorefresh(interval=600000, key="datarefresh")
 
-# --- 2. LÓGICA DE DATOS DIRECTA SMN ---
-def get_smn_text():
-    """Lee el archivo de texto plano del SMN sin usar librerías extras."""
-    url = "https://www.smn.gob.ar/adjuntos/metar.txt"
-    headers = {"User-Agent": "Mozilla/5.0"}
+# --- 2. LÓGICA DE DATOS (CON SALTADOR DE BLOQUEO) ---
+def get_smn_proxy():
+    """Usa un proxy para que el SMN no bloquee al servidor de Streamlit."""
+    url_directa = "https://www.smn.gob.ar/adjuntos/metar.txt"
+    # Este proxy actúa como intermediario para evitar el bloqueo de red
+    proxy_url = f"https://api.allorigins.win/get?url={url_directa}"
+    
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(proxy_url, timeout=20)
         if response.status_code == 200:
-            return response.text
-    except:
-        return None
+            # El proxy devuelve un JSON, extraemos el texto del SMN
+            data = response.json()
+            return data.get('contents', "")
+    except Exception as e:
+        return f"ERROR_RED: {str(e)}"
     return None
 
-def buscar_reporte(icao, bloque_completo):
-    if not bloque_completo: return "Error de conexión con SMN"
+def buscar_reporte(icao, bloque):
+    if not bloque or "ERROR_RED" in bloque: return "Falla de enlace"
     
-    lineas = bloque_completo.split('\n')
+    lineas = bloque.split('\n')
     for linea in lineas:
         if icao.upper() in linea.upper():
             return linea.strip().replace('\r', '')
-    return "No reportado en esta hora"
+    return "No reportado"
 
 # --- 3. INTERFAZ ---
-st.title("🖥️ Vigilancia FIR SAVC (Directo SMN)")
-st.write(f"Sincronizado: **{datetime.now().strftime('%H:%M:%S')}**")
+st.title("🖥️ Vigilancia FIR SAVC (Enlace Emergencia)")
+st.write(f"Actualización vía Proxy: **{datetime.now().strftime('%H:%M:%S')}**")
 
-if st.button("🔄 Actualizar Ahora"):
+if st.button("🔄 Refrescar ahora"):
     st.rerun()
 
 st.divider()
 
-# Obtenemos los datos una sola vez
-texto_smn = get_smn_text()
+# Obtenemos los datos con el saltador de bloqueo
+datos_smn = get_smn_proxy()
 
 cols = st.columns(2)
 
 for i, icao in enumerate(AERODROMOS):
-    reporte = buscar_reporte(icao, texto_smn)
+    metar = buscar_reporte(icao, datos_smn)
     
     with cols[i % 2]:
         with st.expander(f"📍 {icao}", expanded=True):
-            if "Error" in reporte:
-                st.error("❌ El SMN no responde (Verificar red)")
-            elif "No reportado" in reporte:
+            if metar == "Falla de enlace":
+                st.error("❌ Error de red (Servidor SMN bloqueado)")
+            elif metar == "No reportado":
                 st.info("⚪ Sin reporte actual")
             else:
-                if "SPECI" in reporte:
-                    st.warning(f"🔔 {reporte}")
+                if "SPECI" in metar:
+                    st.warning(f"🔔 {metar}")
                 else:
-                    st.success(f"✅ {reporte}")
+                    st.success(f"✅ {metar}")
 
-st.caption("Información obtenida directamente del SMN Argentina.")
+# PANEL DE CONTROL (Solo para verificar si llega algo)
+with st.expander("🛠️ Ver qué está llegando del SMN"):
+    if datos_smn:
+        st.text_area("Datos recibidos:", datos_smn[:1000], height=150)
+    else:
+        st.write("No se recibió nada aún.")
