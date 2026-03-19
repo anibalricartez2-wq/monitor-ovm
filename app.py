@@ -46,7 +46,7 @@ st.title("✈️ Vigilancia Profesional FIR SAVC")
 st.write(f"Sincronizado: **{datetime.now().strftime('%H:%M:%S')}**")
 
 if API_KEY == "1c208dc6ec9442cd97575bdf518fb4a9":
-    st.warning("⚠️ Por favor, ingresá tu API Key de CheckWX en el código.")
+    st.warning("1c208dc6ec9442cd97575bdf518fb4a9")
     st.stop()
 
 headers = {"X-API-Key": API_KEY}
