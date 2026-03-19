@@ -75,7 +75,7 @@ st.write(f"Última sincronización: **{ahora}**")
 
 datos_raw = obtener_datos_checkwx(AERODROMOS)
 
-reportes = {icao: "Esperando reinicio (21:00 hs)..." for icao in AERODROMOS}
+reportes = {icao: "Esperando reinicio (00:00utc hs)..." for icao in AERODROMOS}
 nuevos_logs = []
 
 for metar in datos_raw:
