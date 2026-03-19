@@ -1,73 +1,73 @@
 import streamlit as st
 import requests
-import pandas as pd
 import re
+import pandas as pd
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
+# COLOCÁ ACÁ LA LLAVE QUE GENERASTE
+API_KEY = "1c208dc6ec9442cd97575bdf518fb4a9" 
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-hide_st_style = """<style>.stDeployButton {display:none;} footer {visibility: hidden;} .block-container {padding-top: 1.5rem;}</style>"""
-st.markdown(hide_st_style, unsafe_allow_html=True)
+if 'historial_alertas' not in st.session_state:
+    st.session_state.historial_alertas = []
 
-# Refresco cada 10 min
-st_autorefresh(interval=600000, key="datarefresh")
+st_autorefresh(interval=900000, key="datarefresh") # 15 minutos
 
-# --- 2. LÓGICA DE EXTRACCIÓN (SCRAPING DE TABLA SMN) ---
-def get_smn_table():
-    """Intenta leer la tabla de la web de 'Estado del Tiempo' del SMN."""
-    url = "https://www.smn.gob.ar/estado-del-tiempo"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    try:
-        # Buscamos las tablas en la página de inicio del SMN
-        dfs = pd.read_html(url, header=0)
-        if dfs:
-            return dfs[0] # Retorna la primera tabla (la de METARs)
-    except Exception as e:
-        return f"ERROR: {str(e)}"
-    return None
+# --- 2. LÓGICA TÉCNICA (AUDITORÍA) ---
+def diff_angular(d1, d2):
+    diff = abs(d1 - d2)
+    return diff if diff <= 180 else 360 - diff
+
+def parse_viento(texto):
+    if not texto or "Sin datos" in texto: return None, None, None
+    if "00000KT" in texto: return 0, 0, 0
+    match = re.search(r'(\d{3})(\d{2,3})(G\d{2,3})?KT', texto)
+    if match:
+        return int(match.group(1)), int(match.group(2)), (int(match.group(3)[1:]) if match.group(3) else 0)
+    return None, None, None
+
+def auditar(icao, reporte, taf):
+    alertas = []
+    dr, vr, rr = parse_viento(reporte)
+    dt, vt, rt = parse_viento(taf)
+    if vr is not None and vt is not None:
+        if vr >= 10 or vt >= 10:
+            d_ang = diff_angular(dr, dt)
+            if d_ang >= 60: alertas.append(f"CRIT A: Giro {d_ang}°")
+        if abs(vr - vt) >= 10: alertas.append(f"CRIT B: Dif Int {abs(vr-vt)}kt")
+    return alertas
 
 # --- 3. INTERFAZ ---
-st.title("🖥️ Vigilancia FIR SAVC (Escaneo Visual SMN)")
+st.title("✈️ Vigilancia Profesional FIR SAVC")
 st.write(f"Sincronizado: **{datetime.now().strftime('%H:%M:%S')}**")
 
-if st.button("🔄 Forzar Escaneo"):
-    st.rerun()
+if API_KEY == "1c208dc6ec9442cd97575bdf518fb4a9":
+    st.warning("⚠️ Por favor, ingresá tu API Key de CheckWX en el código.")
+    st.stop()
 
-st.divider()
-
-# Intentamos obtener la tabla completa
-tabla_smn = get_smn_table()
-
+headers = {"X-API-Key": API_KEY}
 cols = st.columns(2)
 
 for i, icao in enumerate(AERODROMOS):
-    reporte = "No encontrado en tabla"
-    
-    # Buscamos el OACI en la tabla de Pandas
-    if isinstance(tabla_smn, pd.DataFrame):
-        # El SMN a veces usa nombres de ciudades, buscamos coincidencia
-        resultado = tabla_smn[tabla_smn.astype(str).apply(lambda x: x.str.contains(icao, case=False)).any(axis=1)]
-        if not resultado.empty:
-            # Si lo encuentra, armamos un string con los datos de las columnas
-            row = resultado.iloc[0]
-            reporte = f"{icao} | Temp: {row.get('Temp. (°C)', '-')} | Vto: {row.get('Viento', '-')} | Vis: {row.get('Visibilidad (km)', '-')}"
+    try:
+        # Pedimos METAR y TAF
+        res_m = requests.get(f"https://api.checkwx.com/metar/{icao}", headers=headers).json()
+        metar = res_m.get('data', ['Sin datos'])[0]
+        res_t = requests.get(f"https://api.checkwx.com/taf/{icao}", headers=headers).json()
+        taf = res_t.get('data', ['Sin datos'])[0]
+        
+        alertas = auditar(icao, metar, taf)
 
-    with cols[i % 2]:
-        with st.expander(f"📍 {icao}", expanded=True):
-            if "ERROR" in str(tabla_smn):
-                st.error("❌ Error de acceso a la web del SMN.")
-            elif reporte == "No encontrado en tabla":
-                st.info(f"⚪ {icao}: Estación no presente en la tabla actual.")
-            else:
-                st.success(f"✅ {reporte}")
-
-# PANEL DE CONTROL PARA ACOSTA
-with st.expander("📊 Ver Tabla Completa del SMN"):
-    if isinstance(tabla_smn, pd.DataFrame):
-        st.dataframe(tabla_smn)
-    else:
-        st.write("No se pudo cargar la tabla comparativa.")
+        with cols[i % 2]:
+            estado = "⚠️ ALERTA" if alertas else "✅ OK"
+            with st.expander(f"📍 {icao} - {estado}", expanded=True):
+                st.caption("TAF:")
+                st.code(taf)
+                st.markdown(f"**METAR:** `{metar}`")
+                for a in alertas: st.error(a)
+    except:
+        st.error(f"Error cargando {icao}")
