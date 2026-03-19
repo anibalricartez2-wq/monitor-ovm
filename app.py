@@ -4,8 +4,20 @@ import pandas as pd
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
-# --- 1. CONFIGURACIÓN DE PÁGINA Y TEMA ---
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
+
+# OCULTAR MENÚ DE STREAMLIT Y OPCIÓN "VIEW SOURCE"
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            .stDeployButton {display:none;}
+            [data-testid="stHeader"] {display: none;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
 
 # Barra lateral para el Menú de Selección de Pantalla
 with st.sidebar:
@@ -15,12 +27,6 @@ with st.sidebar:
         ["Sistema", "Día", "Noche"],
         index=0
     )
-
-# Aplicar el tema visualmente
-if tema == "Día":
-    st.markdown("<style>reportview-container { background: white; color: black; }</style>", unsafe_allow_html=True)
-elif tema == "Noche":
-    st.markdown("<style>stApp { background-color: #0E1117; color: white; }</style>", unsafe_allow_html=True)
 
 # API KEY y Configuración
 API_KEY = "8e7917816866402688f805f637eb54d3"
@@ -45,15 +51,15 @@ def obtener_datos_checkwx(icao_list):
         return []
 
 # --- 4. INTERFAZ ---
-st.title("🖥️ Monitor de Vigilancia e Historial - FIR SAVC")
-ahora = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-st.write(f"Sincronizado: **{ahora}**")
+st.title("🖥️ Monitor de Vigilancia FIR SAVC")
+ahora = datetime.now().strftime('%H:%M:%S')
+st.write(f"Última sincronización automática: **{ahora}**")
 
 # Llamada a los datos
 datos_raw = obtener_datos_checkwx(AERODROMOS)
 
-# Procesamiento y guardado en trazabilidad
-reportes_actuales = {icao: "Sin datos" for icao in AERODROMOS}
+# Procesamiento
+reportes_actuales = {icao: "Esperando reinicio de API (21:00 hs)..." for icao in AERODROMOS}
 nuevos_registros = []
 
 for metar in datos_raw:
@@ -61,42 +67,42 @@ for metar in datos_raw:
         if icao in metar:
             reportes_actuales[icao] = metar
             estado = "RAFAGAS" if "G" in metar else "NORMAL"
-            # Añadir al historial de sesión
             nuevos_registros.append({
-                "Fecha_Hora": ahora,
+                "Fecha_Hora": datetime.now().strftime('%Y-%m-%d %H:%M'),
                 "OACI": icao,
                 "METAR": metar,
                 "Estado": estado
             })
 
-# Actualizar el historial en la sesión del navegador
+# Actualizar el historial
 if nuevos_registros:
     df_nuevos = pd.DataFrame(nuevos_registros)
     st.session_state.historial = pd.concat([st.session_state.historial, df_nuevos], ignore_index=True)
 
-# Renderizado de Tarjetas
+# Tarjetas de Aeródromos
 cols = st.columns(2)
 for i, icao in enumerate(AERODROMOS):
     metar_txt = reportes_actuales[icao]
     with cols[i % 2]:
-        status_label = "⚠️" if "G" in metar_txt else "✅"
-        with st.expander(f"{status_label} {icao}", expanded=True):
+        status_color = "red" if "G" in metar_txt else "green"
+        with st.expander(f"📍 {icao}", expanded=True):
             st.code(metar_txt)
+            if "G" in metar_txt:
+                st.warning("⚠️ Viento fuerte detectado")
 
 st.divider()
 
-# --- 5. EXPORTAR A EXCEL (CSV) ---
-st.subheader("📋 Trazabilidad de la Guardia")
+# --- 5. SECCIÓN DE TRAZABILIDAD Y EXCEL ---
+st.subheader("📊 Historial de la Guardia (Trazabilidad)")
 if not st.session_state.historial.empty:
     st.dataframe(st.session_state.historial.tail(10), use_container_width=True)
     
-    # Convertir a CSV para descarga
     csv = st.session_state.historial.to_csv(index=False).encode('utf-8')
     st.download_button(
-        label="📥 Descargar Historial Completo (Excel/CSV)",
+        label="📥 Descargar Reporte para Excel (.csv)",
         data=csv,
-        file_name=f"trazabilidad_metar_{datetime.now().strftime('%Y%m%d')}.csv",
+        file_name=f"log_metar_{datetime.now().strftime('%d-%m-%Y')}.csv",
         mime="text/csv",
     )
 else:
-    st.info("El historial comenzará a grabarse a las 21:00 hs cuando la API se reactive.")
+    st.info("El registro comenzará automáticamente a las 21:00 hs.")
