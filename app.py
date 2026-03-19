@@ -7,92 +7,57 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# API KEY
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-hide_st_style = """
-            <style>
-            .stDeployButton {display:none;}
-            footer {visibility: hidden;}
-            .block-container {padding-top: 1.5rem;}
-            [data-testid="stExpander"] {border: 1px solid #e0e0e0; border-radius: 8px;}
-            </style>
-            """
-st.markdown(hide_st_style, unsafe_allow_html=True)
-
 st_autorefresh(interval=600000, key="datarefresh")
 
-# --- 2. FUNCIONES TÉCNICAS ---
-def diff_angular(d1, d2):
-    diff = abs(d1 - d2)
-    return diff if diff <= 180 else 360 - diff
-
-def parse_viento(texto):
-    if not texto or "Esperando" in texto or "No disponible" in texto: 
-        return None, None, None
-    if "00000KT" in texto: 
-        return 0, 0, 0
-    match = re.search(r'(\d{3})(\d{2,3})(G\d{2,3})?KT', texto)
-    if match:
-        d = int(match.group(1))
-        v = int(match.group(2))
-        r = int(match.group(3)[1:]) if match.group(3) else 0
-        return d, v, r
-    return None, None, None
-
-def auditar(icao, metar, taf):
-    alertas = []
-    dm, vm, rm = parse_viento(metar)
-    dt, vt, rt = parse_viento(taf)
+# --- 2. LÓGICA DE DATOS HÍBRIDA ---
+def traer_datos(icao):
+    """Intenta CheckWX, si falla o viene vacío, intenta fuente de emergencia."""
+    headers = {"X-API-Key": API_KEY}
+    metar, taf = "Sin datos", "Sin datos"
     
-    if vm is not None and vt is not None:
-        if vm >= 10 or vt >= 10:
-            da = diff_angular(dm, dt)
-            if da >= 60:
-                alertas.append(f"🔴 CRIT A: Giro de {da}°")
-        dif_i = abs(vm - vt)
-        if dif_i >= 10:
-            alertas.append(f"🟠 CRIT B: Dif. Int. {dif_i}kt")
-    return alertas
+    try:
+        # Intento METAR
+        res_m = requests.get(f"https://api.checkwx.com/metar/{icao}", headers=headers, timeout=8).json()
+        if res_m.get('data'):
+            metar = res_m['data'][0]
+        else:
+            # FUENTE DE EMERGENCIA (AVWX) si CheckWX viene vacío
+            res_alt = requests.get(f"https://avwx.rest/api/metar/{icao}?format=json", timeout=8).json()
+            metar = res_alt.get('raw', "Sin reporte")
+            
+        # Intento TAF
+        res_t = requests.get(f"https://api.checkwx.com/taf/{icao}", headers=headers, timeout=8).json()
+        if res_t.get('data'):
+            taf = res_t['data'][0]
+        else:
+            res_t_alt = requests.get(f"https://avwx.rest/api/taf/{icao}?format=json", timeout=8).json()
+            taf = res_t_alt.get('raw', "Sin reporte TAF")
+            
+    except:
+        pass
+    return metar, taf
 
 # --- 3. INTERFAZ ---
-st.title("Monitor de Vigilancia FIR SAVC")
+st.title("🛡️ Sistema de Vigilancia (Dual Link)")
 st.write(f"Sincronizado: **{datetime.now().strftime('%H:%M:%S')}**")
 
-if st.button("🔄 Actualizar Ahora"):
-    st.rerun()
-
-headers = {"X-API-Key": API_KEY}
 cols = st.columns(2)
 
 for i, icao in enumerate(AERODROMOS):
-    try:
-        # Petición METAR
-        res_m = requests.get(f"https://api.checkwx.com/metar/{icao}", headers=headers, timeout=10).json()
-        metar = res_m.get('data', ['Esperando METAR...'])[0]
-        
-        # Petición TAF
-        res_t = requests.get(f"https://api.checkwx.com/taf/{icao}", headers=headers, timeout=10).json()
-        taf = res_t.get('data', ['TAF No disponible'])[0]
-        
-        alertas = auditar(icao, metar, taf)
-
-        with cols[i % 2]:
-            status = "⚠️ ALERTA" if alertas else "✅ NORMAL"
-            with st.expander(f"📍 {icao} - {status}", expanded=True):
-                if "No disponible" in taf:
-                    st.info("No hay TAF cargado.")
-                else:
-                    st.caption("TAF VIGENTE:")
-                    st.code(taf)
-                
-                st.markdown(f"**METAR:** `{metar}`")
-                for a in alertas:
-                    st.error(a)
-    except Exception as e:
-        with cols[i % 2]:
-            st.error(f"📍 {icao}: Error de conexión. ({e})")
+    m, t = traer_datos(icao)
+    
+    with cols[i % 2]:
+        color = "✅" if "Sin datos" not in m else "❌"
+        with st.expander(f"📍 {icao} {color}", expanded=True):
+            if "Sin reporte" in m and "Sin reporte" in t:
+                st.error("⚠️ Estación fuera de línea en circuitos internacionales.")
+            else:
+                st.caption("TAF:")
+                st.code(t)
+                st.markdown(f"**METAR:** `{m}`")
 
 st.divider()
-st.caption("Vigilancia meteorológica para despacho.")
+st.caption("Si ves 'Sin datos', verificá la activación de tu cuenta CheckWX en tu e-mail.")
