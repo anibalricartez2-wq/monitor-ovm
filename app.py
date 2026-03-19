@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
-import xml.etree.ElementTree as ET
+import pandas as pd
+import re
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
@@ -15,46 +16,58 @@ st.markdown(hide_st_style, unsafe_allow_html=True)
 # Refresco cada 10 min
 st_autorefresh(interval=600000, key="datarefresh")
 
-# --- 2. LÓGICA DE DATOS INTERNACIONAL (NOAA ADDS) ---
-def get_noaa_data(icao):
-    """Obtiene METAR de la base de datos global de aviación (EE.UU.)."""
+# --- 2. LÓGICA DE EXTRACCIÓN (SCRAPING DE TABLA SMN) ---
+def get_smn_table():
+    """Intenta leer la tabla de la web de 'Estado del Tiempo' del SMN."""
+    url = "https://www.smn.gob.ar/estado-del-tiempo"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     try:
-        url = f"https://www.aviationweather.gov/adds/dataserver_current/httpparam?dataSource=metars&requestType=retrieve&format=xml&stationString={icao}&hoursBeforeNow=2"
-        response = requests.get(url, timeout=15)
-        if response.status_code == 200:
-            root = ET.fromstring(response.content)
-            # Buscamos el texto del METAR en el XML
-            metar_element = root.find(".//raw_text")
-            if metar_element is not None:
-                return metar_element.text
+        # Buscamos las tablas en la página de inicio del SMN
+        dfs = pd.read_html(url, header=0)
+        if dfs:
+            return dfs[0] # Retorna la primera tabla (la de METARs)
     except Exception as e:
-        return f"Error técnico: {str(e)}"
-    return "No disponible en red internacional"
+        return f"ERROR: {str(e)}"
+    return None
 
 # --- 3. INTERFAZ ---
-st.title("🖥️ Vigilancia FIR SAVC (Red Global ADDS)")
-st.write(f"Sincronizado con Servidor Global: **{datetime.now().strftime('%H:%M:%S')}**")
+st.title("🖥️ Vigilancia FIR SAVC (Escaneo Visual SMN)")
+st.write(f"Sincronizado: **{datetime.now().strftime('%H:%M:%S')}**")
 
-if st.button("🔄 Forzar Refresco"):
+if st.button("🔄 Forzar Escaneo"):
     st.rerun()
 
 st.divider()
 
+# Intentamos obtener la tabla completa
+tabla_smn = get_smn_table()
+
 cols = st.columns(2)
 
 for i, icao in enumerate(AERODROMOS):
-    metar = get_noaa_data(icao)
+    reporte = "No encontrado en tabla"
     
+    # Buscamos el OACI en la tabla de Pandas
+    if isinstance(tabla_smn, pd.DataFrame):
+        # El SMN a veces usa nombres de ciudades, buscamos coincidencia
+        resultado = tabla_smn[tabla_smn.astype(str).apply(lambda x: x.str.contains(icao, case=False)).any(axis=1)]
+        if not resultado.empty:
+            # Si lo encuentra, armamos un string con los datos de las columnas
+            row = resultado.iloc[0]
+            reporte = f"{icao} | Temp: {row.get('Temp. (°C)', '-')} | Vto: {row.get('Viento', '-')} | Vis: {row.get('Visibilidad (km)', '-')}"
+
     with cols[i % 2]:
         with st.expander(f"📍 {icao}", expanded=True):
-            if "Error" in metar:
-                st.error("❌ Falla de conexión con el servidor global.")
-            elif "No disponible" in metar:
-                st.info(f"⚪ {icao}: Sin reporte en circuito internacional.")
+            if "ERROR" in str(tabla_smn):
+                st.error("❌ Error de acceso a la web del SMN.")
+            elif reporte == "No encontrado en tabla":
+                st.info(f"⚪ {icao}: Estación no presente en la tabla actual.")
             else:
-                if "SPECI" in metar:
-                    st.warning(f"🔔 {metar}")
-                else:
-                    st.success(f"✅ {metar}")
+                st.success(f"✅ {reporte}")
 
-st.info("ℹ️ Esta fuente es la NOAA (EE.UU.). Si un aeródromo local no figura, es porque el SMN no exportó el dato al mundo.")
+# PANEL DE CONTROL PARA ACOSTA
+with st.expander("📊 Ver Tabla Completa del SMN"):
+    if isinstance(tabla_smn, pd.DataFrame):
+        st.dataframe(tabla_smn)
+    else:
+        st.write("No se pudo cargar la tabla comparativa.")
