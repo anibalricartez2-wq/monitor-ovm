@@ -7,11 +7,10 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# NUEVA API KEY INTEGRADA
+# API KEY
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-# Estética Profesional (Ocultar menús de Streamlit)
 hide_st_style = """
             <style>
             .stDeployButton {display:none;}
@@ -22,17 +21,18 @@ hide_st_style = """
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# Refresco automático cada 10 minutos
 st_autorefresh(interval=600000, key="datarefresh")
 
-# --- 2. FUNCIONES TÉCNICAS (AUDITORÍA) ---
+# --- 2. FUNCIONES TÉCNICAS ---
 def diff_angular(d1, d2):
     diff = abs(d1 - d2)
     return diff if diff <= 180 else 360 - diff
 
 def parse_viento(texto):
-    if not texto or "Sin datos" in texto: return None, None, None
-    if "00000KT" in texto: return 0, 0, 0
+    if not texto or "Esperando" in texto or "No disponible" in texto: 
+        return None, None, None
+    if "00000KT" in texto: 
+        return 0, 0, 0
     match = re.search(r'(\d{3})(\d{2,3})(G\d{2,3})?KT', texto)
     if match:
         d = int(match.group(1))
@@ -47,21 +47,17 @@ def auditar(icao, metar, taf):
     dt, vt, rt = parse_viento(taf)
     
     if vm is not None and vt is not None:
-        # CRIT A: Giro >= 60° con intensidad significativa
         if vm >= 10 or vt >= 10:
             da = diff_angular(dm, dt)
             if da >= 60:
                 alertas.append(f"🔴 CRIT A: Giro de {da}°")
-        
-        # CRIT B: Diferencia de intensidad >= 10kt
         dif_i = abs(vm - vt)
         if dif_i >= 10:
             alertas.append(f"🟠 CRIT B: Dif. Int. {dif_i}kt")
-            
     return alertas
 
 # --- 3. INTERFAZ ---
-st.title("🖥️ Monitor de Vigilancia FIR SAVC")
+st.title("Monitor de Vigilancia FIR SAVC")
 st.write(f"Sincronizado: **{datetime.now().strftime('%H:%M:%S')}**")
 
 if st.button("🔄 Actualizar Ahora"):
@@ -72,20 +68,21 @@ cols = st.columns(2)
 
 for i, icao in enumerate(AERODROMOS):
     try:
-        # Consulta de datos
+        # Petición METAR
         res_m = requests.get(f"https://api.checkwx.com/metar/{icao}", headers=headers, timeout=10).json()
         metar = res_m.get('data', ['Esperando METAR...'])[0]
         
+        # Petición TAF
         res_t = requests.get(f"https://api.checkwx.com/taf/{icao}", headers=headers, timeout=10).json()
         taf = res_t.get('data', ['TAF No disponible'])[0]
         
-        alertas = auditar(icao, metar, taf) if "Esperando" not in metar and "No disponible" not in taf else []
+        alertas = auditar(icao, metar, taf)
 
         with cols[i % 2]:
             status = "⚠️ ALERTA" if alertas else "✅ NORMAL"
             with st.expander(f"📍 {icao} - {status}", expanded=True):
                 if "No disponible" in taf:
-                    st.info("No hay TAF cargado para este aeródromo.")
+                    st.info("No hay TAF cargado.")
                 else:
                     st.caption("TAF VIGENTE:")
                     st.code(taf)
@@ -95,7 +92,7 @@ for i, icao in enumerate(AERODROMOS):
                     st.error(a)
     except Exception as e:
         with cols[i % 2]:
-            st.error(f"📍 {icao}: Error de conexión.")
+            st.error(f"📍 {icao}: Error de conexión. ({e})")
 
 st.divider()
-st.caption("Datos profesionales vía CheckWX API. Vigilancia meteorológica para despacho.")
+st.caption("Vigilancia meteorológica para despacho.")
