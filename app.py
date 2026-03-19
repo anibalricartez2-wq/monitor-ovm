@@ -1,32 +1,31 @@
 import streamlit as st
 import requests
 import re
-import pandas as pd
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. CONFIGURACIÓN ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# API KEY PROPORCIONADA
-API_KEY = "1c208dc6ec9442cd97575bdf518fb4a9"
+# NUEVA API KEY INTEGRADA
+API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-# Estética de Monitor de Torre
+# Estética Profesional (Ocultar menús de Streamlit)
 hide_st_style = """
             <style>
             .stDeployButton {display:none;}
             footer {visibility: hidden;}
             .block-container {padding-top: 1.5rem;}
-            [data-testid="stExpander"] {border: 1px solid #d1d1d1; border-radius: 10px;}
+            [data-testid="stExpander"] {border: 1px solid #e0e0e0; border-radius: 8px;}
             </style>
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-# Refresco cada 10 minutos (600.000 ms)
+# Refresco automático cada 10 minutos
 st_autorefresh(interval=600000, key="datarefresh")
 
-# --- 2. LÓGICA DE AUDITORÍA ---
+# --- 2. FUNCIONES TÉCNICAS (AUDITORÍA) ---
 def diff_angular(d1, d2):
     diff = abs(d1 - d2)
     return diff if diff <= 180 else 360 - diff
@@ -48,13 +47,13 @@ def auditar(icao, metar, taf):
     dt, vt, rt = parse_viento(taf)
     
     if vm is not None and vt is not None:
-        # CRIT A: Giro >= 60° con viento >= 10kt
+        # CRIT A: Giro >= 60° con intensidad significativa
         if vm >= 10 or vt >= 10:
             da = diff_angular(dm, dt)
             if da >= 60:
                 alertas.append(f"🔴 CRIT A: Giro de {da}°")
         
-        # CRIT B: Dif Intensidad >= 10kt
+        # CRIT B: Diferencia de intensidad >= 10kt
         dif_i = abs(vm - vt)
         if dif_i >= 10:
             alertas.append(f"🟠 CRIT B: Dif. Int. {dif_i}kt")
@@ -62,10 +61,10 @@ def auditar(icao, metar, taf):
     return alertas
 
 # --- 3. INTERFAZ ---
-st.title("🖥️ Vigilancia Profesional FIR SAVC")
-st.write(f"Última actualización: **{datetime.now().strftime('%H:%M:%S')}**")
+st.title("🖥️ Monitor de Vigilancia FIR SAVC")
+st.write(f"Sincronizado: **{datetime.now().strftime('%H:%M:%S')}**")
 
-if st.button("🔄 Actualizar Manual"):
+if st.button("🔄 Actualizar Ahora"):
     st.rerun()
 
 headers = {"X-API-Key": API_KEY}
@@ -73,31 +72,30 @@ cols = st.columns(2)
 
 for i, icao in enumerate(AERODROMOS):
     try:
-        # Llamadas a la API
+        # Consulta de datos
         res_m = requests.get(f"https://api.checkwx.com/metar/{icao}", headers=headers, timeout=10).json()
-        metar = res_m.get('data', ['Sin datos'])[0]
+        metar = res_m.get('data', ['Esperando METAR...'])[0]
         
         res_t = requests.get(f"https://api.checkwx.com/taf/{icao}", headers=headers, timeout=10).json()
-        taf = res_t.get('data', ['Sin datos'])[0]
+        taf = res_t.get('data', ['TAF No disponible'])[0]
         
-        alertas = auditar(icao, metar, taf) if "Sin datos" not in [metar, taf] else []
+        alertas = auditar(icao, metar, taf) if "Esperando" not in metar and "No disponible" not in taf else []
 
         with cols[i % 2]:
-            status_label = "⚠️ ALERTA" if alertas else "✅ NORMAL"
-            with st.expander(f"📍 {icao} - {status_label}", expanded=True):
-                if "Sin datos" in taf:
-                    st.caption("TAF: No disponible")
+            status = "⚠️ ALERTA" if alertas else "✅ NORMAL"
+            with st.expander(f"📍 {icao} - {status}", expanded=True):
+                if "No disponible" in taf:
+                    st.info("No hay TAF cargado para este aeródromo.")
                 else:
                     st.caption("TAF VIGENTE:")
                     st.code(taf)
                 
                 st.markdown(f"**METAR:** `{metar}`")
-                
                 for a in alertas:
                     st.error(a)
-    except:
+    except Exception as e:
         with cols[i % 2]:
-            st.warning(f"📍 {icao}: Error de conexión temporal.")
+            st.error(f"📍 {icao}: Error de conexión.")
 
 st.divider()
-st.info("💡 Este monitor compara automáticamente el METAR actual contra el TAF para detectar desvíos críticos.")
+st.caption("Datos profesionales vía CheckWX API. Vigilancia meteorológica para despacho.")
