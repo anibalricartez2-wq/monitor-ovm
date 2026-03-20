@@ -159,8 +159,8 @@ st.markdown(
     f"""
     <div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px;'>
         <b>Sistema de Vigilancia FIR SAVC © 2026</b><br>
-        Desarrollado por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>
-        <i>Criterios de Enmienda TAF - SMN. SISTEMA EN PRUEBA</i>
+        Desarrollado por <b>Gemini AI</b> & <b>RICARTEZ</b><br>
+        <i>Criterios de Enmienda TAF - SMN.</i>
     </div>
     """, 
     unsafe_allow_html=True
