@@ -8,63 +8,59 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS "BLOQUEO RADICAL"
+# CSS "OPERACIÓN INVISIBLE": Ataca las clases raíz de los botones de código
 st.markdown("""
     <style>
-    /* 1. Ocultar menús estándar */
+    /* 1. Ocultar menús estándar y botones de despliegue */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
 
-    /* 2. CREAR UN ESCUDO INVISIBLE SOBRE EL HEADER */
-    /* Este bloque tapa toda la parte superior derecha para que no puedas clickear el menú de código */
-    header::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 80%; /* Tapa el 80% de la derecha */
-        height: 60px;
-        background-color: transparent;
-        z-index: 999998;
-        pointer-events: all; /* Captura los clics y no los deja pasar al menú */
+    /* 2. ATAQUE DIRECTO A LAS CLASES DE BOTONES DE CÓDIGO */
+    /* Streamlit usa estas clases para los botones de la derecha */
+    .st-emotion-cache-15ec604, 
+    .st-emotion-cache-10pb97d, 
+    .st-emotion-cache-6q9sum, 
+    header [data-testid="stHeaderActionElements"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
     }
 
-    /* 3. ASEGURAR QUE LA FLECHA DE LA IZQUIERDA FUNCIONE */
-    /* La ponemos por encima de todo para que sea lo único cliqueable arriba */
+    /* 3. INDEPENDENCIA TOTAL PARA LA FLECHA DEL MENÚ LATERAL */
+    /* La sacamos del flujo del header y la ponemos fija en la esquina */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         position: fixed !important;
-        top: 10px !important;
-        left: 10px !important;
-        z-index: 999999 !important; /* El nivel más alto */
+        top: 20px !important;
+        left: 20px !important;
+        z-index: 1000000 !important; /* Prioridad máxima absoluta */
         background-color: rgba(128, 128, 128, 0.2) !important;
-        border-radius: 5px !important;
+        padding: 5px !important;
+        border-radius: 50% !important;
         cursor: pointer !important;
     }
 
-    /* 4. Ocultar visualmente los elementos del header */
-    [data-testid="stHeaderActionElements"] {
-        display: none !important;
-    }
-    
+    /* 4. Limpieza total del header */
     header {
-        background-color: rgba(0,0,0,0) !important;
+        background: transparent !important;
+        pointer-events: none !important; /* El header deja de recibir clics */
     }
 
-    .block-container {padding-top: 3.5rem !important;}
+    /* Margen para que el título no se solape con la flecha */
+    .block-container {padding-top: 4rem !important;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (CONFIGURACIÓN) ---
+# --- 2. BARRA LATERAL (MENÚ DE PANTALLA) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    # Selector de pantalla restaurado y funcional
+    # Selector de modo de pantalla
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
     st.info("Actualización automática cada 15 min.")
-    st.caption(f"🚀 Desarrollado por: Gemini AI & ANIBAL RICARTEZ")
+    st.caption(f"🚀 Desarrollado por: Gemini AI & [Tu Nombre y Apellido]")
 
 # --- 3. CONFIGURACIÓN TÉCNICA ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
@@ -75,7 +71,7 @@ st_autorefresh(interval=900000, key="vigilancia_refresh")
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Estado", "Motivo"])
 
-# --- 4. MOTOR DE DATOS ---
+# --- 4. MOTOR DE DATOS (METAR + TAF) ---
 def obtener_datos(icao_list):
     icaos = ",".join(icao_list)
     headers = {"X-API-Key": API_KEY}
@@ -87,12 +83,12 @@ def obtener_datos(icao_list):
         return [], []
 
 def analizar_alerta(metar_txt):
-    # Detecta ráfagas (G) seguidas de números (viento operativo)
+    # Detecta ráfagas (G) seguidas de números para evitar falsos positivos
     if re.search(r'G\d{2}', metar_txt):
         return "RAFAGAS", "⚠️ ALERTA: Ráfagas detectadas."
     return "NORMAL", "✅ Condición normal."
 
-# --- 5. INTERFAZ PRINCIPAL ---
+# --- 5. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
 st.write(f"Última sincronización: **{ahora}** (Reseteo API: 21:00 hs)")
@@ -137,7 +133,7 @@ if not st.session_state.historial.empty:
 st.markdown("---")
 st.markdown(
     f"<div style='text-align: center; color: gray; font-size: 0.8rem;'>"
-    f"Monitor FIR SAVC desarrollado por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>"
+    f"Monitor FIR SAVC desarrollado por <b>Gemini AI</b> & <b>[Tu Nombre y Apellido]</b><br>"
     f"Comodoro Rivadavia, Argentina - 2026"
     f"</div>", 
     unsafe_allow_html=True
