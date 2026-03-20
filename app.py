@@ -70,7 +70,7 @@ def analizar_enmienda(metar_txt):
 
 # --- 4. MOTOR DE DATOS ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
-AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
+AERODROMOS = ["SAVV","SAVE","SAVT","SAWC","SAVC","SAWG","SAWE","SAWH"]
 
 st_autorefresh(interval=1800000, key="refresh_v10_final")
 
@@ -136,7 +136,7 @@ st.dataframe(st.session_state.historial.tail(10), use_container_width=True)
 footer_html = """
 <div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px; margin-top: 30px;'>
     <b>Sistema de Vigilancia FIR SAVC © 2026</b><br>
-    Desarrollado por <b>Gemini AI</b> & <b>Ferreira</b><br>
+    Desarrollado por <b>Gemini AI</b> & <b>RICARTEZ ANIBAL</b><br>
     <i>Control de Enmiendas TAF según Manual SMN Argentina.</i>
 </div>
 """
