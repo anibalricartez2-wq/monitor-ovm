@@ -13,30 +13,29 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# CSS "OPERATIVO TOTAL": Forzamos la aparición del botón y el modo oscuro
+# --- 2. ESTILO CSS (INVISIBILIDAD Y RESCATE) ---
 st.markdown("""
     <style>
-    /* 1. OCULTAR HEADER Y BASURA DE ADMIN */
+    /* Ocultar elementos de administración */
     header[data-testid="stHeader"], footer, .stDeployButton, .stDocstring { 
         display: none !important; 
     }
     
-    /* 2. FORZAR MODO NOCHE DESDE EL CÓDIGO (BACKEND) */
+    /* Fondo oscuro forzado */
     .stApp {
         background-color: #0e1117 !important;
         color: #fafafa !important;
     }
 
-    /* 3. RESCATE AGRESIVO DEL BOTÓN DEL MENÚ */
-    /* Lo convertimos en un botón flotante circular independiente */
+    /* BOTÓN DE RESCATE: Círculo azul para abrir el menú */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         position: fixed !important;
-        top: 15px !important;
-        left: 15px !important;
+        top: 20px !important;
+        left: 20px !important;
         z-index: 9999999 !important;
         background-color: #262730 !important;
-        border: 2px solid #4f8bf9 !important; /* Color azul para que lo encuentres fácil */
+        border: 2px solid #4f8bf9 !important;
         border-radius: 50% !important;
         width: 50px !important;
         height: 50px !important;
@@ -46,32 +45,29 @@ st.markdown("""
         cursor: pointer !important;
     }
 
-    /* Ajuste de márgenes para el contenido */
     .block-container { padding-top: 4.5rem !important; }
     .stExpander { border: 1px solid #30363d !important; background-color: #161b22 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (CONTROL Y CRITERIOS) ---
+# --- 3. BARRA LATERAL ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    st.write("Vigilancia basada en manual SMN.")
-    
+    st.info("Vigilancia automática basada en el Manual de Enmiendas TAF del SMN.")
     st.divider()
-    with st.expander("🔍 Criterios de Enmienda", expanded=False):
-        st.write("**Viento:** Δ 10kt o G ≥ 10kt.")
-        st.write("**Visibilidad:** ≤ 3000m (Puntos d, e, f).")
-        st.write("**Techo:** BKN/OVC ≤ 1000ft (Puntos i, j).")
+    with st.expander("🔍 Criterios SMN Activos", expanded=False):
+        st.write("**Viento:** Ráfagas (G) ≥ 10kt.")
+        st.write("**Visibilidad:** Umbrales ≤ 3000m.")
+        st.write("**Techo:** BKN/OVC ≤ 1000ft.")
         st.write("**Fenómenos:** RA, DZ, SN, TS, FG, BR, VA.")
-    
     st.divider()
-    st.caption("📍 Comodoro Rivadavia")
+    st.caption("📍 Comodoro Rivadavia - Argentina")
 
-# --- 3. LÓGICA DE DATOS ---
+# --- 4. LÓGICA DE DATOS ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-st_autorefresh(interval=1800000, key="refresh_v8_definitivo")
+st_autorefresh(interval=1800000, key="refresh_v9_final")
 
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Alerta"])
@@ -80,29 +76,24 @@ def analizar_enmienda(metar_txt):
     alertas = []
     iconos_lista = []
     
-    # Viento
     if re.search(r'G(\d{2})', metar_txt):
         alertas.append("RAFAGAS")
         iconos_lista.append("⚠️")
     
-    # Tormenta
     if "TS" in metar_txt:
         alertas.append("TORMENTA")
         iconos_lista.append("⛈️")
         
-    # Visibilidad (Umbral 3000m)
     vis_match = re.search(r' (\d{4}) ', metar_txt)
     if vis_match and int(vis_match.group(1)) <= 3000:
         alertas.append("BAJA VIS.")
         iconos_lista.append("🌫️")
 
-    # Fenómenos (RA, DZ, etc.)
     if any(f in metar_txt for f in ["RA", "DZ", "SN", "FG", "BR", "VA"]):
         if "BAJA VIS." not in alertas:
             alertas.append("FENOMENO")
             iconos_lista.append("🌧️")
             
-    # Techo
     if any(n in metar_txt for n in ["BKN00", "OVC00", "BKN010", "OVC010"]):
         alertas.append("TECHO BAJO")
         iconos_lista.append("☁️")
@@ -120,10 +111,10 @@ def obtener_datos():
         return m, t
     except: return [], []
 
-# --- 4. INTERFAZ ---
+# --- 5. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
-st.write(f"Estado: **Operativo** | Actualización: **{ahora}**")
+st.write(f"Estado: **Operativo** | Última Sincronización: **{ahora}**")
 
 metars, tafs = obtener_datos()
 datos = {icao: {"metar": "Sin datos", "taf": "Sin datos"} for icao in AERODROMOS}
@@ -152,10 +143,12 @@ st.divider()
 st.subheader("📊 Historial de Trazabilidad")
 st.dataframe(st.session_state.historial.tail(10), use_container_width=True)
 
-# CRÉDITOS
-st.markdown(
-    f"""
-    <div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px;'>
-        <b>Sistema de Vigilancia FIR SAVC © 2026</b><br>
-        Desarrollado por <b>Gemini AI</b> & <b>Ferreira</b><br>
-        <i>Control de Enmiendas TAF - SMN
+# --- 6. CRÉDITOS ---
+footer_html = f"""
+<div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px;'>
+    <b>Sistema de Vigilancia FIR SAVC © 2026</b><br>
+    Desarrollado por <b>Gemini AI</b> & <b>Ferreira</b><br>
+    <i>Control de Enmiendas TAF - SMN Argentina.</i>
+</div>
+"""
+st.markdown(footer_html, unsafe_allow_html=True)
