@@ -8,28 +8,52 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Monitor FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS "OPERATIVO BÚNKER": Oculta menús de admin y documentación
+# CSS "OPERATIVO TOTAL": Recupera la flecha y mata el menú de código
 st.markdown("""
     <style>
-    header[data-testid="stHeader"], footer, .stDeployButton, .stDocstring { display: none !important; }
-    [data-testid="stSidebarCollapsedControl"] {
-        display: flex !important; position: fixed !important; top: 15px !important; left: 15px !important;
-        z-index: 999999 !important; background-color: rgba(151, 166, 195, 0.3) !important;
-        border-radius: 5px !important; padding: 5px !important; color: white !important;
+    /* 1. Ocultar el Header original, Footer y Documentación */
+    header[data-testid="stHeader"], footer, .stDeployButton, .stDocstring { 
+        display: none !important; 
+        visibility: hidden !important;
     }
-    .block-container { padding-top: 1rem !important; margin-top: -30px !important; }
-    .stExpander { border: 1px solid #30363d !important; background-color: #0d1117 !important; }
+    
+    /* 2. RESCATAR LA FLECHA (BOTÓN DEL SIDEBAR) */
+    /* La sacamos del header y la fijamos en la esquina superior izquierda */
+    [data-testid="stSidebarCollapsedControl"] {
+        display: flex !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 9999999 !important;
+        background-color: rgba(100, 100, 100, 0.4) !important;
+        border-radius: 8px !important;
+        padding: 5px !important;
+        color: white !important;
+        cursor: pointer !important;
+    }
+
+    /* 3. Ajuste de la pantalla para que no se corte el título */
+    .block-container { 
+        padding-top: 3.5rem !important; 
+    }
+
+    /* Estética de las tarjetas de aeródromos */
+    .stExpander { 
+        border: 1px solid #30363d !important; 
+        background-color: rgba(13, 17, 23, 0.8) !important; 
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 2. BARRA LATERAL (CONTROL Y CRITERIOS) ---
 with st.sidebar:
     st.header("⚙️ Panel de Control")
+    # Aquí puedes cambiar el tema de Sistema/Día/Noche
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     
     st.divider()
     with st.expander("🔍 Criterios de Enmienda (SMN)", expanded=False):
-        st.write("**Viento:** Δ Dir ≥ 60° (si V > 10kt) | Δ Vel ≥ 10kt | Ráfaga Δ ≥ 10kt.")
+        st.write("**Viento:** Δ Dir ≥ 60° | Δ Vel ≥ 10kt | Ráfaga Δ ≥ 10kt.")
         st.write("**Visibilidad:** Cruce de 150, 350, 600, 800, 1500 o 3000m.")
         st.write("**Techo (BKN/OVC):** Cruce de 100, 200, 500, 1000 o 1500ft.")
         st.caption("Fuente: Criterios Enmienda TAF - SMN.")
@@ -42,28 +66,41 @@ with st.sidebar:
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-st_autorefresh(interval=1800000, key="refresh_savc_v3")
+# Refresco automático cada 30 minutos
+st_autorefresh(interval=1800000, key="refresh_final_v5")
 
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Alerta"])
 
 def analizar_enmienda(metar_txt):
     alertas = []
+    iconos_lista = []
+    
     # Viento/Ráfagas
     if re.search(r'G(\d{2})', metar_txt):
         alertas.append("RAFAGAS")
-    # Visibilidad
+        iconos_lista.append("⚠️")
+    
+    # Tormentas
+    if "TS" in metar_txt:
+        alertas.append("TORMENTA")
+        iconos_lista.append("⛈️")
+        
+    # Visibilidad (Umbral 3000m del manual)
     if any(f in metar_txt for f in ["FG", "BR", "DZ", "RA", "SN"]):
         vis_match = re.search(r' (\d{4}) ', metar_txt)
         if vis_match and int(vis_match.group(1)) <= 3000:
             alertas.append("BAJA VIS.")
-    # Tormentas
-    if "TS" in metar_txt: alertas.append("TORMENTA")
-    # Techo de nubes
+            iconos_lista.append("🌫️")
+            
+    # Techo de nubes (Umbral 1000ft del manual)
     if any(n in metar_txt for n in ["BKN00", "OVC00", "BKN010", "OVC010"]):
         alertas.append("TECHO BAJO")
+        iconos_lista.append("☁️")
     
-    return (", ".join(alertas) if alertas else "NORMAL"), ("⚠️" if alertas else "✅")
+    estado = ", ".join(alertas) if alertas else "NORMAL"
+    icon_final = iconos_lista[0] if iconos_lista else "✅"
+    return estado, icon_final
 
 def obtener_datos():
     icaos = ",".join(AERODROMOS)
@@ -77,7 +114,7 @@ def obtener_datos():
 # --- 4. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
-st.write(f"Estado: **Operativo** | Actualizado: **{ahora}**")
+st.write(f"Vigilancia Activa | Actualizado: **{ahora}**")
 
 metars, tafs = obtener_datos()
 datos = {icao: {"metar": "Sin datos", "taf": "Sin datos"} for icao in AERODROMOS}
@@ -103,16 +140,16 @@ for i, icao in enumerate(AERODROMOS):
                 st.session_state.historial = pd.concat([st.session_state.historial, nueva], ignore_index=True).drop_duplicates(subset=["OACI", "METAR"])
 
 st.divider()
-st.subheader("📊 Historial de Trazabilidad")
+st.subheader("📊 Historial de Trazabilidad (Últimos movimientos)")
 st.dataframe(st.session_state.historial.tail(10), use_container_width=True)
 
-# DERECHOS DE AUTOR - CRÉDITOS FINALES
+# CRÉDITOS FINALES
 st.markdown(
     f"""
-    <div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px;'>
+    <div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px; margin-top: 30px;'>
         <b>Sistema de Vigilancia FIR SAVC © 2026</b><br>
         Desarrollado por <b>Gemini AI</b> & <b>RICARTEZ ANIBAL</b><br>
-        <i>Comodoro Rivadavia, Argentina. Todos los derechos reservados.</i>
+        <i>Basado en Criterios de Enmienda TAF del Servicio Meteorológico Nacional.</i>
     </div>
     """, 
     unsafe_allow_html=True
