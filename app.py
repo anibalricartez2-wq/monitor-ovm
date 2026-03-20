@@ -65,7 +65,7 @@ with st.sidebar:
 
 # --- 4. LÓGICA DE DATOS ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
-AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
+AERODROMOS = ["SAVV","SAVE","SAVT","SAWC","SAVC","SAWG","SAWE","SAWH"]
 
 st_autorefresh(interval=1800000, key="refresh_v9_final")
 
