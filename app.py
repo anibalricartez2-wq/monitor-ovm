@@ -6,65 +6,68 @@ from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
+st.set_page_config(page_title="Monitor FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS "LIMPIEZA DE PISTA": Oculta lo que sobra y rescata el menú lateral
+# CSS "BLINDAJE TOTAL": Tapa el header original y rescata la flecha
 st.markdown("""
     <style>
-    /* 1. Ocultar menús estándar y footer */
+    /* 1. Ocultar menús y footer estándar */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
 
-    /* 2. OCULTAR BOTONES DE CÓDIGO (DERECHA) */
-    /* Atacamos el contenedor y los elementos de acción del header */
-    [data-testid="stHeaderActionElements"], 
-    .st-emotion-cache-15ec604, 
-    .st-emotion-cache-6q9sum {
-        display: none !important;
-        visibility: hidden !important;
-        width: 0 !important;
+    /* 2. EL PARCHE FÍSICO: Una franja que tapa TODO el header original */
+    /* Esto bloquea los clics en los botones de código de la derecha */
+    header[data-testid="stHeader"]::before {
+        content: "SISTEMA DE MONITOREO OPERATIVO - FIR SAVC";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 45px;
+        background-color: #0e1117; /* Color de fondo oscuro sólido */
+        z-index: 999990;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #555;
+        font-size: 0.8rem;
+        font-weight: bold;
+        letter-spacing: 1px;
+        pointer-events: all; /* Captura los clics para que no lleguen al menú de atrás */
     }
 
-    /* 3. RESCATAR LA FLECHA DEL MENÚ (IZQUIERDA) */
-    /* La sacamos del header y la ponemos fija en la esquina superior */
+    /* 3. RESCATE DE LA FLECHA (IZQUIERDA) */
+    /* La ponemos por encima del parche para que sea lo único que podés tocar */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
-        visibility: visible !important;
         position: fixed !important;
-        top: 15px !important;
+        top: 8px !important;
         left: 15px !important;
         z-index: 1000000 !important;
-        background-color: rgba(128, 128, 128, 0.2) !important;
+        background-color: rgba(255, 255, 255, 0.1) !important;
         border-radius: 4px !important;
-        padding: 5px !important;
-        cursor: pointer !important;
     }
 
-    /* 4. Dejar el header transparente para que no tape nada */
-    header {
-        background: transparent !important;
-    }
-
-    /* Margen superior para el contenido */
-    .block-container {padding-top: 4rem !important;}
+    /* 4. Ajustar el margen del contenido para que no lo tape el parche */
+    .block-container {padding-top: 4.5rem !important;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (MENÚ DE PANTALLA) ---
+# --- 2. BARRA LATERAL (CONFIGURACIÓN) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    # OPCIÓN DE PANTALLA
+    # SELECTOR DE MODO DE PANTALLA (Día/Noche)
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
-    st.info("Actualización automática cada 15 min.")
+    st.info("Sincronización automática: 15 min.")
     st.caption(f"🚀 Desarrollado por: Gemini AI & [Tu Nombre y Apellido]")
 
 # --- 3. CONFIGURACIÓN TÉCNICA ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-# Refresco cada 15 min
+# Refresco cada 15 minutos
 st_autorefresh(interval=900000, key="vigilancia_refresh")
 
 if 'historial' not in st.session_state:
@@ -82,7 +85,7 @@ def obtener_datos(icao_list):
         return [], []
 
 def analizar_alerta(metar_txt):
-    # Detecta ráfagas (G) seguidas de números (ej: 21020G35KT)
+    # Detecta ráfagas (G) seguidas de números para evitar errores en SAWG
     if re.search(r'G\d{2}', metar_txt):
         return "RAFAGAS", "⚠️ ALERTA: Ráfagas detectadas."
     return "NORMAL", "✅ Condición normal."
@@ -90,7 +93,7 @@ def analizar_alerta(metar_txt):
 # --- 5. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
-st.write(f"Última sincronización: **{ahora}** (Reseteo API: 21:00 hs)")
+st.write(f"Última actualización: **{ahora}** (Reseteo API: 21:00 hs)")
 
 metars, tafs = obtener_datos(AERODROMOS)
 
@@ -114,7 +117,7 @@ for i, icao in enumerate(AERODROMOS):
             st.code(info["metar"])
             st.markdown("**TAF:**")
             st.code(info["taf"])
-            st.caption(f"**Análisis de Guardia:** {motivo}")
+            st.caption(f"**Análisis:** {motivo}")
 
             if "SAV" in info["metar"] and "Sin datos" not in info["metar"]:
                 nueva_fila = pd.DataFrame([{"Fecha_Hora": ahora, "OACI": icao, "METAR": info["metar"], "Estado": estado, "Motivo": motivo}])
