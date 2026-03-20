@@ -8,72 +8,67 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Monitor FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS "BLINDAJE TOTAL": Tapa el header original y rescata la flecha
+# CSS "ESCUDO OPERATIVO": Bloquea la interacción con el header de Streamlit
 st.markdown("""
     <style>
-    /* 1. Ocultar menús y footer estándar */
+    /* 1. Ocultar menús y footer de base */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
 
-    /* 2. EL PARCHE FÍSICO: Una franja que tapa TODO el header original */
-    /* Esto bloquea los clics en los botones de código de la derecha */
-    header[data-testid="stHeader"]::before {
-        content: "SISTEMA DE MONITOREO OPERATIVO - FIR SAVC";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 45px;
-        background-color: #0e1117; /* Color de fondo oscuro sólido */
-        z-index: 999990;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #555;
-        font-size: 0.8rem;
-        font-weight: bold;
-        letter-spacing: 1px;
-        pointer-events: all; /* Captura los clics para que no lleguen al menú de atrás */
+    /* 2. ANULAR CLICS EN EL HEADER (DERECHA) */
+    /* Esto hace que, aunque veas los botones, no funcionen ni se desplieguen */
+    header[data-testid="stHeader"] {
+        pointer-events: none !important;
+        background: rgba(0,0,0,0) !important;
     }
 
-    /* 3. RESCATE DE LA FLECHA (IZQUIERDA) */
-    /* La ponemos por encima del parche para que sea lo único que podés tocar */
+    /* 3. INDEPENDENCIA DE LA FLECHA (IZQUIERDA) */
+    /* La rescatamos dándole sus propios clics para que el menú de pantalla funcione */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         position: fixed !important;
-        top: 8px !important;
+        top: 15px !important;
         left: 15px !important;
         z-index: 1000000 !important;
-        background-color: rgba(255, 255, 255, 0.1) !important;
-        border-radius: 4px !important;
+        background-color: rgba(128, 128, 128, 0.2) !important;
+        border-radius: 5px !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
     }
 
-    /* 4. Ajustar el margen del contenido para que no lo tape el parche */
-    .block-container {padding-top: 4.5rem !important;}
+    /* 4. OCULTAR ELEMENTOS DINÁMICOS POR CLASE */
+    /* Atacamos las clases que Streamlit usa para los botones de edición */
+    [data-testid="stHeaderActionElements"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* Espaciado para que el título no se pegue arriba */
+    .block-container {padding-top: 2.5rem !important;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (CONFIGURACIÓN) ---
+# --- 2. BARRA LATERAL (CONFIGURACIÓN DE PANTALLA) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    # SELECTOR DE MODO DE PANTALLA (Día/Noche)
+    # AQUÍ ESTÁ EL SELECTOR DE PANTALLA
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
-    st.info("Sincronización automática: 15 min.")
-    st.caption(f"🚀 Desarrollado por: Gemini AI & ANIBAL RICARTEZ")
+    st.info("Sincronización automática: 30 min.")
+    st.caption(f"🚀 Desarrollado por: Gemini AI & [Tu Nombre y Apellido]")
 
 # --- 3. CONFIGURACIÓN TÉCNICA ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-# Refresco cada 15 minutos
-st_autorefresh(interval=900000, key="vigilancia_refresh")
+# REFRESH CADA 30 MINUTOS (1.800.000 ms)
+st_autorefresh(interval=1800000, key="vigilancia_refresh_30m")
 
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Estado", "Motivo"])
 
-# --- 4. MOTOR DE DATOS (METAR + TAF) ---
+# --- 4. MOTOR DE DATOS ---
 def obtener_datos(icao_list):
     icaos = ",".join(icao_list)
     headers = {"X-API-Key": API_KEY}
@@ -85,7 +80,7 @@ def obtener_datos(icao_list):
         return [], []
 
 def analizar_alerta(metar_txt):
-    # Detecta ráfagas (G) seguidas de números para evitar errores en SAWG
+    # Detecta ráfagas (G) seguidas de números (viento operativo)
     if re.search(r'G\d{2}', metar_txt):
         return "RAFAGAS", "⚠️ ALERTA: Ráfagas detectadas."
     return "NORMAL", "✅ Condición normal."
@@ -93,7 +88,7 @@ def analizar_alerta(metar_txt):
 # --- 5. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
-st.write(f"Última actualización: **{ahora}** (Reseteo API: 21:00 hs)")
+st.write(f"Sincronizado: **{ahora}** (Ciclo: 30 min / Reseteo API: 21:00 hs)")
 
 metars, tafs = obtener_datos(AERODROMOS)
 
@@ -117,7 +112,7 @@ for i, icao in enumerate(AERODROMOS):
             st.code(info["metar"])
             st.markdown("**TAF:**")
             st.code(info["taf"])
-            st.caption(f"**Análisis:** {motivo}")
+            st.caption(f"**Análisis de Guardia:** {motivo}")
 
             if "SAV" in info["metar"] and "Sin datos" not in info["metar"]:
                 nueva_fila = pd.DataFrame([{"Fecha_Hora": ahora, "OACI": icao, "METAR": info["metar"], "Estado": estado, "Motivo": motivo}])
@@ -135,7 +130,7 @@ if not st.session_state.historial.empty:
 st.markdown("---")
 st.markdown(
     f"<div style='text-align: center; color: gray; font-size: 0.8rem;'>"
-    f"Monitor FIR SAVC desarrollado por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>"
+    f"Monitor FIR SAVC desarrollado por <b>Gemini AI</b> & <b>[Tu Nombre y Apellido]</b><br>"
     f"Comodoro Rivadavia, Argentina - 2026"
     f"</div>", 
     unsafe_allow_html=True
