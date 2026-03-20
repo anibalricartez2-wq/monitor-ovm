@@ -63,7 +63,7 @@ with st.sidebar:
 
 # --- 4. MOTOR DE DATOS ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
-AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
+AERODROMOS = ["SAVV","SAVE","SAVT","SAWC","SAVC","SAWG","SAWE","SAWH"]
 
 st_autorefresh(interval=1800000, key="refresh_final_smn")
 
@@ -118,4 +118,4 @@ st.subheader("📊 Historial")
 st.dataframe(st.session_state.historial.tail(10), use_container_width=True)
 
 # CRÉDITOS SIMPLES (Sin f-strings complejos para evitar SyntaxError)
-st.markdown("<br><hr><center><b>Monitor FIR SAVC © 2026</b><br>Ferreira & Gemini AI</center>", unsafe_allow_html=True)
+st.markdown("<br><hr><center><b>Monitor FIR SAVC © 2026</b><br>RICARTEZ ANIBAL & Gemini AI</center>", unsafe_allow_html=True)
