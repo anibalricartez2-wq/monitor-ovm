@@ -8,7 +8,7 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS "ESCUDO Y RESCATE": Bloquea la derecha y libera la izquierda
+# CSS "LIMPIEZA DE PISTA": Oculta lo que sobra y rescata el menú lateral
 st.markdown("""
     <style>
     /* 1. Ocultar menús estándar y footer */
@@ -16,48 +16,45 @@ st.markdown("""
     footer {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
 
-    /* 2. EL PARCHE: Bloquea los clics en la parte superior derecha */
-    /* Esto evita que el botón de código reciba el clic, aunque Streamlit lo muestre */
-    header::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        right: 0;
-        width: 150px; /* Ancho suficiente para tapar el menú de código */
-        height: 60px;
-        z-index: 999998;
-        background-color: transparent;
-        pointer-events: all; 
+    /* 2. OCULTAR BOTONES DE CÓDIGO (DERECHA) */
+    /* Atacamos el contenedor y los elementos de acción del header */
+    [data-testid="stHeaderActionElements"], 
+    .st-emotion-cache-15ec604, 
+    .st-emotion-cache-6q9sum {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
     }
 
-    /* 3. RESCATE DE LA FLECHA (IZQUIERDA) */
-    /* La sacamos de la zona de conflicto y le damos prioridad total */
+    /* 3. RESCATAR LA FLECHA DEL MENÚ (IZQUIERDA) */
+    /* La sacamos del header y la ponemos fija en la esquina superior */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
+        visibility: visible !important;
         position: fixed !important;
-        top: 12px !important;
-        left: 12px !important;
+        top: 15px !important;
+        left: 15px !important;
         z-index: 1000000 !important;
-        background-color: rgba(128, 128, 128, 0.1) !important;
+        background-color: rgba(128, 128, 128, 0.2) !important;
         border-radius: 4px !important;
+        padding: 5px !important;
         cursor: pointer !important;
     }
 
-    /* 4. Ocultar el contenido del header visualmente */
-    [data-testid="stHeaderActionElements"] {
-        opacity: 0 !important;
-        pointer-events: none !important;
+    /* 4. Dejar el header transparente para que no tape nada */
+    header {
+        background: transparent !important;
     }
 
-    /* Ajuste de margen para el título */
-    .block-container {padding-top: 3.5rem !important;}
+    /* Margen superior para el contenido */
+    .block-container {padding-top: 4rem !important;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (CONFIGURACIÓN) ---
+# --- 2. BARRA LATERAL (MENÚ DE PANTALLA) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    # Selector de pantalla funcional
+    # OPCIÓN DE PANTALLA
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
     st.info("Actualización automática cada 15 min.")
@@ -73,7 +70,7 @@ st_autorefresh(interval=900000, key="vigilancia_refresh")
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Estado", "Motivo"])
 
-# --- 4. MOTOR DE DATOS ---
+# --- 4. MOTOR DE DATOS (METAR + TAF) ---
 def obtener_datos(icao_list):
     icaos = ",".join(icao_list)
     headers = {"X-API-Key": API_KEY}
@@ -85,7 +82,7 @@ def obtener_datos(icao_list):
         return [], []
 
 def analizar_alerta(metar_txt):
-    # Detecta ráfagas solo con 'G' seguido de números
+    # Detecta ráfagas (G) seguidas de números (ej: 21020G35KT)
     if re.search(r'G\d{2}', metar_txt):
         return "RAFAGAS", "⚠️ ALERTA: Ráfagas detectadas."
     return "NORMAL", "✅ Condición normal."
