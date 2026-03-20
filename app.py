@@ -147,7 +147,7 @@ st.dataframe(st.session_state.historial.tail(10), use_container_width=True)
 footer_html = f"""
 <div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px;'>
     <b>Sistema de Vigilancia FIR SAVC © 2026</b><br>
-    Desarrollado por <b>Gemini AI</b> & <b>Ferreira</b><br>
+    Desarrollado por <b>Gemini AI</b> & <b>RICARTEZ C ANIBAL</b><br>
     <i>Control de Enmiendas TAF - SMN Argentina.</i>
 </div>
 """
