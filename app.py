@@ -108,7 +108,7 @@ st.markdown(
     f"""
     <div style='text-align: center; color: #8b949e; font-size: 0.8rem; margin-top: 50px; border-top: 1px solid #30363d; padding-top: 20px;'>
         <b>Monitor Vigilancia FIR SAVC © 2026</b><br>
-        Desarrollado por <b>Gemini AI</b> & <b>[Tu Nombre y Apellido]</b><br>
+        Desarrollado por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>
         <i>Comodoro Rivadavia, Argentina</i>
     </div>
     """, 
