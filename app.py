@@ -8,44 +8,46 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS ESTRUCTURAL: No oculta, "aniquila" el espacio del header
+# CSS QUIRÚRGICO: Oculta solo lo que molesta y rescata la flecha
 st.markdown("""
     <style>
-    /* Ocultar elementos estándar */
+    /* 1. Ocultar el menú de hamburguesa y el footer */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
 
-    /* 1. ELIMINAR EL HEADER DEL FLUJO VISUAL */
-    header[data-testid="stHeader"] {
+    /* 2. OCULTAR LOS BOTONES DE CÓDIGO (DERECHA) SIN MATAR EL HEADER */
+    [data-testid="stHeaderActionElements"] {
         display: none !important;
-        height: 0px !important;
     }
 
-    /* 2. REPOSICIONAR LA FLECHA DEL MENÚ LATERAL */
-    /* Como eliminamos el header, la flecha desaparece. La rescatamos y la ponemos fija */
+    /* 3. RESCATAR Y FIJAR LA FLECHA DEL MENÚ (IZQUIERDA) */
+    /* La forzamos a estar por encima de todo y ser cliqueable */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         position: fixed !important;
-        top: 10px !important;
-        left: 10px !important;
-        z-index: 1000000 !important;
-        background-color: rgba(255, 255, 255, 0.1) !important;
-        border-radius: 5px !important;
-        padding: 5px !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999 !important;
+        background-color: rgba(151, 166, 195, 0.15) !important;
+        border-radius: 4px !important;
+        cursor: pointer !important;
     }
 
-    /* 3. SUBIR TODO EL CONTENIDO PARA QUE NO QUEDE HUECO BLANCO */
-    .main .block-container {
-        padding-top: 2rem !important;
+    /* 4. Hacer que el fondo del header sea invisible para que no tape nada */
+    header {
+        background-color: rgba(0,0,0,0) !important;
     }
+
+    /* Margen para el título principal */
+    .block-container {padding-top: 3.5rem !important;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (MENÚ DE PANTALLA) ---
+# --- 2. BARRA LATERAL (CONFIGURACIÓN) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    # Selector de modo de pantalla - ESTO ES LO QUE NECESITABAS
+    # El selector de pantalla que necesitás
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
     st.info("Actualización automática cada 15 min.")
@@ -72,6 +74,7 @@ def obtener_datos(icao_list):
         return [], []
 
 def analizar_alerta(metar_txt):
+    # Detecta ráfagas (G) seguidas de números
     if re.search(r'G\d{2}', metar_txt):
         return "RAFAGAS", "⚠️ ALERTA: Ráfagas detectadas."
     return "NORMAL", "✅ Condición normal."
@@ -79,7 +82,7 @@ def analizar_alerta(metar_txt):
 # --- 5. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
-st.write(f"Última sincronización: **{ahora}** (Reseteo API: 21:00 hs)")
+st.write(f"Sincronizado: **{ahora}** (Reseteo API: 21:00 hs)")
 
 metars, tafs = obtener_datos(AERODROMOS)
 
@@ -103,9 +106,9 @@ for i, icao in enumerate(AERODROMOS):
             st.code(info["metar"])
             st.markdown("**TAF:**")
             st.code(info["taf"])
-            st.caption(f"**Análisis:** {motivo}")
+            st.caption(f"**Análisis de Guardia:** {motivo}")
 
-            if "SAV" in info["metar"]:
+            if "SAV" in info["metar"] and "Sin datos" not in info["metar"]:
                 nueva_fila = pd.DataFrame([{"Fecha_Hora": ahora, "OACI": icao, "METAR": info["metar"], "Estado": estado, "Motivo": motivo}])
                 st.session_state.historial = pd.concat([st.session_state.historial, nueva_fila], ignore_index=True).drop_duplicates(subset=["OACI", "METAR"])
 
