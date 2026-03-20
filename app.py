@@ -8,55 +8,44 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS "OPERACIÓN INVISIBLE": Ataca las clases raíz de los botones de código
+# CSS ESTRUCTURAL: No oculta, "aniquila" el espacio del header
 st.markdown("""
     <style>
-    /* 1. Ocultar menús estándar y botones de despliegue */
+    /* Ocultar elementos estándar */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
 
-    /* 2. ATAQUE DIRECTO A LAS CLASES DE BOTONES DE CÓDIGO */
-    /* Streamlit usa estas clases para los botones de la derecha */
-    .st-emotion-cache-15ec604, 
-    .st-emotion-cache-10pb97d, 
-    .st-emotion-cache-6q9sum, 
-    header [data-testid="stHeaderActionElements"] {
+    /* 1. ELIMINAR EL HEADER DEL FLUJO VISUAL */
+    header[data-testid="stHeader"] {
         display: none !important;
-        visibility: hidden !important;
-        pointer-events: none !important;
+        height: 0px !important;
     }
 
-    /* 3. INDEPENDENCIA TOTAL PARA LA FLECHA DEL MENÚ LATERAL */
-    /* La sacamos del flujo del header y la ponemos fija en la esquina */
+    /* 2. REPOSICIONAR LA FLECHA DEL MENÚ LATERAL */
+    /* Como eliminamos el header, la flecha desaparece. La rescatamos y la ponemos fija */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
-        visibility: visible !important;
         position: fixed !important;
-        top: 20px !important;
-        left: 20px !important;
-        z-index: 1000000 !important; /* Prioridad máxima absoluta */
-        background-color: rgba(128, 128, 128, 0.2) !important;
+        top: 10px !important;
+        left: 10px !important;
+        z-index: 1000000 !important;
+        background-color: rgba(255, 255, 255, 0.1) !important;
+        border-radius: 5px !important;
         padding: 5px !important;
-        border-radius: 50% !important;
-        cursor: pointer !important;
     }
 
-    /* 4. Limpieza total del header */
-    header {
-        background: transparent !important;
-        pointer-events: none !important; /* El header deja de recibir clics */
+    /* 3. SUBIR TODO EL CONTENIDO PARA QUE NO QUEDE HUECO BLANCO */
+    .main .block-container {
+        padding-top: 2rem !important;
     }
-
-    /* Margen para que el título no se solape con la flecha */
-    .block-container {padding-top: 4rem !important;}
     </style>
     """, unsafe_allow_html=True)
 
 # --- 2. BARRA LATERAL (MENÚ DE PANTALLA) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    # Selector de modo de pantalla
+    # Selector de modo de pantalla - ESTO ES LO QUE NECESITABAS
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
     st.info("Actualización automática cada 15 min.")
@@ -83,7 +72,6 @@ def obtener_datos(icao_list):
         return [], []
 
 def analizar_alerta(metar_txt):
-    # Detecta ráfagas (G) seguidas de números para evitar falsos positivos
     if re.search(r'G\d{2}', metar_txt):
         return "RAFAGAS", "⚠️ ALERTA: Ráfagas detectadas."
     return "NORMAL", "✅ Condición normal."
