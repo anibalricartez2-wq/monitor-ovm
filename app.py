@@ -8,38 +8,48 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS QUIRÚRGICO: Oculta solo lo que molesta y rescata la flecha
+# CSS "ESCUDO Y RESCATE": Bloquea la derecha y libera la izquierda
 st.markdown("""
     <style>
-    /* 1. Ocultar el menú de hamburguesa y el footer */
+    /* 1. Ocultar menús estándar y footer */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
 
-    /* 2. OCULTAR LOS BOTONES DE CÓDIGO (DERECHA) SIN MATAR EL HEADER */
-    [data-testid="stHeaderActionElements"] {
-        display: none !important;
+    /* 2. EL PARCHE: Bloquea los clics en la parte superior derecha */
+    /* Esto evita que el botón de código reciba el clic, aunque Streamlit lo muestre */
+    header::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 150px; /* Ancho suficiente para tapar el menú de código */
+        height: 60px;
+        z-index: 999998;
+        background-color: transparent;
+        pointer-events: all; 
     }
 
-    /* 3. RESCATAR Y FIJAR LA FLECHA DEL MENÚ (IZQUIERDA) */
-    /* La forzamos a estar por encima de todo y ser cliqueable */
+    /* 3. RESCATE DE LA FLECHA (IZQUIERDA) */
+    /* La sacamos de la zona de conflicto y le damos prioridad total */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         position: fixed !important;
-        top: 15px !important;
-        left: 15px !important;
-        z-index: 999999 !important;
-        background-color: rgba(151, 166, 195, 0.15) !important;
+        top: 12px !important;
+        left: 12px !important;
+        z-index: 1000000 !important;
+        background-color: rgba(128, 128, 128, 0.1) !important;
         border-radius: 4px !important;
         cursor: pointer !important;
     }
 
-    /* 4. Hacer que el fondo del header sea invisible para que no tape nada */
-    header {
-        background-color: rgba(0,0,0,0) !important;
+    /* 4. Ocultar el contenido del header visualmente */
+    [data-testid="stHeaderActionElements"] {
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
 
-    /* Margen para el título principal */
+    /* Ajuste de margen para el título */
     .block-container {padding-top: 3.5rem !important;}
     </style>
     """, unsafe_allow_html=True)
@@ -47,7 +57,7 @@ st.markdown("""
 # --- 2. BARRA LATERAL (CONFIGURACIÓN) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    # El selector de pantalla que necesitás
+    # Selector de pantalla funcional
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
     st.info("Actualización automática cada 15 min.")
@@ -57,12 +67,13 @@ with st.sidebar:
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
+# Refresco cada 15 min
 st_autorefresh(interval=900000, key="vigilancia_refresh")
 
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Estado", "Motivo"])
 
-# --- 4. MOTOR DE DATOS (METAR + TAF) ---
+# --- 4. MOTOR DE DATOS ---
 def obtener_datos(icao_list):
     icaos = ",".join(icao_list)
     headers = {"X-API-Key": API_KEY}
@@ -74,7 +85,7 @@ def obtener_datos(icao_list):
         return [], []
 
 def analizar_alerta(metar_txt):
-    # Detecta ráfagas (G) seguidas de números
+    # Detecta ráfagas solo con 'G' seguido de números
     if re.search(r'G\d{2}', metar_txt):
         return "RAFAGAS", "⚠️ ALERTA: Ráfagas detectadas."
     return "NORMAL", "✅ Condición normal."
@@ -82,7 +93,7 @@ def analizar_alerta(metar_txt):
 # --- 5. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
-st.write(f"Sincronizado: **{ahora}** (Reseteo API: 21:00 hs)")
+st.write(f"Última sincronización: **{ahora}** (Reseteo API: 21:00 hs)")
 
 metars, tafs = obtener_datos(AERODROMOS)
 
