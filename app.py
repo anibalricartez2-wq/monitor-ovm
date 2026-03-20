@@ -61,7 +61,7 @@ with st.sidebar:
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
     st.info("Sincronización automática: 15 min.")
-    st.caption(f"🚀 Desarrollado por: Gemini AI & [Tu Nombre y Apellido]")
+    st.caption(f"🚀 Desarrollado por: Gemini AI & ANIBAL RICARTEZ")
 
 # --- 3. CONFIGURACIÓN TÉCNICA ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
@@ -135,7 +135,7 @@ if not st.session_state.historial.empty:
 st.markdown("---")
 st.markdown(
     f"<div style='text-align: center; color: gray; font-size: 0.8rem;'>"
-    f"Monitor FIR SAVC desarrollado por <b>Gemini AI</b> & <b>[Tu Nombre y Apellido]</b><br>"
+    f"Monitor FIR SAVC desarrollado por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>"
     f"Comodoro Rivadavia, Argentina - 2026"
     f"</div>", 
     unsafe_allow_html=True
