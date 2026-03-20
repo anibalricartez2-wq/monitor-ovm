@@ -5,42 +5,80 @@ import re
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Monitor FIR SAVC", page_icon="✈️", layout="wide")
+# --- 1. CONFIGURACIÓN DE PÁGINA Y TEMA ---
+st.set_page_config(
+    page_title="Monitor FIR SAVC", 
+    page_icon="✈️", 
+    layout="wide",
+    initial_sidebar_state="collapsed" # Empieza cerrado para ganar espacio
+)
 
-# CSS "OPERATIVO TOTAL": Mantiene la flecha y oculta la basura de admin
+# CSS "RESCATE TOTAL": Asegura que la flecha sea visible y el fondo sea oscuro
 st.markdown("""
     <style>
-    header[data-testid="stHeader"], footer, .stDeployButton, .stDocstring { display: none !important; visibility: hidden !important; }
-    [data-testid="stSidebarCollapsedControl"] {
-        display: flex !important; position: fixed !important; top: 15px !important; left: 15px !important;
-        z-index: 9999999 !important; background-color: rgba(100, 100, 100, 0.4) !important;
-        border-radius: 8px !important; padding: 5px !important; color: white !important;
+    /* 1. OCULTAR EL HEADER ORIGINAL (DONDE ESTÁ EL MENÚ DE CÓDIGO) */
+    header[data-testid="stHeader"] {
+        display: none !important;
     }
-    .block-container { padding-top: 3.5rem !important; }
-    .stExpander { border: 1px solid #30363d !important; background-color: rgba(13, 17, 23, 0.8) !important; }
+    
+    /* 2. CREAR UN BOTÓN FLOTANTE PARA EL MENÚ (FLECHA) */
+    /* Esto hace que la flecha sea un círculo gris arriba a la izquierda */
+    [data-testid="stSidebarCollapsedControl"] {
+        display: flex !important;
+        position: fixed !important;
+        top: 20px !important;
+        left: 20px !important;
+        z-index: 9999999 !important;
+        background-color: #262730 !important;
+        border: 1px solid #464b5d !important;
+        border-radius: 50% !important;
+        width: 45px !important;
+        height: 45px !important;
+        justify-content: center !important;
+        align-items: center !important;
+        color: white !important;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.5) !important;
+    }
+
+    /* 3. FORZAR FONDO OSCURO SIEMPRE (MODO NOCHE) */
+    .stApp {
+        background-color: #0e1117 !important;
+        color: #fafafa !important;
+    }
+
+    /* Ajuste de márgenes para no tapar el título */
+    .block-container { 
+        padding-top: 4rem !important; 
+    }
+    
+    /* Estética de las tarjetas de aeródromos */
+    .stExpander { 
+        border: 1px solid #30363d !important; 
+        background-color: #161b22 !important; 
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL ---
+# --- 2. BARRA LATERAL (CONTROL) ---
 with st.sidebar:
     st.header("⚙️ Panel de Control")
-    tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
+    st.info("El sistema está configurado según el Manual de Enmiendas TAF del SMN.")
+    
     st.divider()
-    with st.expander("🔍 Criterios SMN Activos", expanded=False):
-        st.write("**Viento:** G ≥ 10kt.")
+    with st.expander("🔍 Criterios Activos", expanded=False):
+        st.write("**Viento:** Ráfagas ≥ 10kt.")
         st.write("**Visibilidad:** ≤ 3000m.")
         st.write("**Techo:** BKN/OVC ≤ 1000ft.")
-        st.write("**Fenómenos:** TS, RA, DZ, SN, FG, BR, VA.")
+        st.write("**Fenómenos:** Todos los del PDF.")
+    
     st.divider()
-    st.info("🔄 Sincronización: 30 min.")
     st.caption("📍 Comodoro Rivadavia - Argentina")
 
-# --- 3. LÓGICA DE ANÁLISIS MEJORADA ---
+# --- 3. LÓGICA DE DATOS ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-st_autorefresh(interval=1800000, key="refresh_v6_smn")
+st_autorefresh(interval=1800000, key="refresh_v7_final")
 
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Alerta"])
@@ -49,31 +87,24 @@ def analizar_enmienda(metar_txt):
     alertas = []
     iconos_lista = []
     
-    # VIENTO (G)
     if re.search(r'G(\d{2})', metar_txt):
         alertas.append("RAFAGAS")
         iconos_lista.append("⚠️")
     
-    # TORMENTA (TS)
     if "TS" in metar_txt:
         alertas.append("TORMENTA")
         iconos_lista.append("⛈️")
         
-    # VISIBILIDAD (Detecta si es <= 3000)
     vis_match = re.search(r' (\d{4}) ', metar_txt)
-    if vis_match:
-        if int(vis_match.group(1)) <= 3000:
-            alertas.append("BAJA VIS.")
-            iconos_lista.append("🌫️")
+    if vis_match and int(vis_match.group(1)) <= 3000:
+        alertas.append("BAJA VIS.")
+        iconos_lista.append("🌫️")
 
-    # LLUVIA / NIEVE / OTROS (Ajustado para detectar +/- o VCSH)
-    # Buscamos RA (Lluvia), DZ (Llovizna), SN (Nieve), FG (Niebla), BR (Neblina), VA (Ceniza)
     if any(f in metar_txt for f in ["RA", "DZ", "SN", "FG", "BR", "VA", "PL", "GR"]):
-        if "BAJA VIS." not in alertas: # Para no repetir icono si ya hay visibilidad baja
+        if "BAJA VIS." not in alertas:
             alertas.append("FENOMENO")
             iconos_lista.append("🌧️")
             
-    # TECHO DE NUBES (BKN/OVC <= 1000ft)
     if any(n in metar_txt for n in ["BKN00", "OVC00", "BKN010", "OVC010"]):
         alertas.append("TECHO BAJO")
         iconos_lista.append("☁️")
@@ -94,7 +125,7 @@ def obtener_datos():
 # --- 4. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
-st.write(f"Vigilancia Activa | Sincronización: **{ahora}**")
+st.write(f"Vigilancia Operativa | Actualizado: **{ahora}**")
 
 metars, tafs = obtener_datos()
 datos = {icao: {"metar": "Sin datos", "taf": "Sin datos"} for icao in AERODROMOS}
@@ -128,8 +159,8 @@ st.markdown(
     f"""
     <div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px;'>
         <b>Sistema de Vigilancia FIR SAVC © 2026</b><br>
-        Desarrollado por <b>Gemini AI</b> & <b>RICARTEZ ANIBAL</b><br>
-        <i>Basado en Criterios de Enmienda TAF - SMN.</i>
+        Desarrollado por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>
+        <i>Criterios de Enmienda TAF - SMN. SISTEMA EN PRUEBA</i>
     </div>
     """, 
     unsafe_allow_html=True
