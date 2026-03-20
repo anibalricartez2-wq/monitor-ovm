@@ -5,150 +5,117 @@ import re
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
-# --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(
-    page_title="Monitor FIR SAVC", 
-    page_icon="✈️", 
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+# --- 1. CONFIGURACIÓN ---
+st.set_page_config(page_title="Monitor FIR SAVC", layout="wide")
 
-# --- 2. ESTILO CSS (INVISIBILIDAD Y RESCATE) ---
+# --- 2. CSS DE RESCATE (FORZADO TOTAL) ---
 st.markdown("""
     <style>
-    /* Ocultar elementos de administración */
-    header[data-testid="stHeader"], footer, .stDeployButton, .stDocstring { 
-        display: none !important; 
+    /* Ocultar basura de admin */
+    header, footer, .stDeployButton { display: none !important; }
+
+    /* Forzar fondo oscuro */
+    .stApp { background-color: #0e1117 !important; color: #fafafa !important; }
+
+    /* BOTÓN FLOTANTE MANUAL (El círculo azul) */
+    .boton-menu {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        width: 50px;
+        height: 50px;
+        background-color: #4f8bf9;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999999;
+        cursor: pointer;
+        font-size: 24px;
+        box-shadow: 0px 4px 15px rgba(0,0,0,0.5);
     }
     
-    /* Fondo oscuro forzado */
-    .stApp {
-        background-color: #0e1117 !important;
-        color: #fafafa !important;
-    }
-
-    /* BOTÓN DE RESCATE: Círculo azul para abrir el menú */
+    /* Mostrar la flecha de Streamlit a toda costa */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
+        visibility: visible !important;
         position: fixed !important;
         top: 20px !important;
         left: 20px !important;
-        z-index: 9999999 !important;
-        background-color: #262730 !important;
+        background: #262730 !important;
         border: 2px solid #4f8bf9 !important;
+        z-index: 1000000 !important;
         border-radius: 50% !important;
-        width: 50px !important;
-        height: 50px !important;
-        justify-content: center !important;
-        align-items: center !important;
-        box-shadow: 0px 0px 15px rgba(0,0,0,0.8) !important;
-        cursor: pointer !important;
     }
 
-    .block-container { padding-top: 4.5rem !important; }
-    .stExpander { border: 1px solid #30363d !important; background-color: #161b22 !important; }
+    .block-container { padding-top: 5rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- 3. BARRA LATERAL ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    st.info("Vigilancia automática basada en el Manual de Enmiendas TAF del SMN.")
+    st.write("Vigilancia FIR SAVC")
     st.divider()
-    with st.expander("🔍 Criterios SMN Activos", expanded=False):
-        st.write("**Viento:** Ráfagas (G) ≥ 10kt.")
-        st.write("**Visibilidad:** Umbrales ≤ 3000m.")
-        st.write("**Techo:** BKN/OVC ≤ 1000ft.")
-        st.write("**Fenómenos:** RA, DZ, SN, TS, FG, BR, VA.")
-    st.divider()
-    st.caption("📍 Comodoro Rivadavia - Argentina")
+    st.info("Criterios de Enmienda SMN Activos.")
+    st.caption("📍 Comodoro Rivadavia")
 
-# --- 4. LÓGICA DE DATOS ---
+# --- 4. MOTOR DE DATOS ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
-AERODROMOS = ["SAVV","SAVE","SAVT","SAWC","SAVC","SAWG","SAWE","SAWH"]
+AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-st_autorefresh(interval=1800000, key="refresh_v9_final")
+st_autorefresh(interval=1800000, key="refresh_final_smn")
 
 if 'historial' not in st.session_state:
-    st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Alerta"])
+    st.session_state.historial = pd.DataFrame(columns=["Hora", "OACI", "METAR", "Alerta"])
 
-def analizar_enmienda(metar_txt):
+def analizar(metar_txt):
     alertas = []
-    iconos_lista = []
-    
-    if re.search(r'G(\d{2})', metar_txt):
-        alertas.append("RAFAGAS")
-        iconos_lista.append("⚠️")
-    
-    if "TS" in metar_txt:
-        alertas.append("TORMENTA")
-        iconos_lista.append("⛈️")
-        
-    vis_match = re.search(r' (\d{4}) ', metar_txt)
-    if vis_match and int(vis_match.group(1)) <= 3000:
-        alertas.append("BAJA VIS.")
-        iconos_lista.append("🌫️")
-
-    if any(f in metar_txt for f in ["RA", "DZ", "SN", "FG", "BR", "VA"]):
-        if "BAJA VIS." not in alertas:
-            alertas.append("FENOMENO")
-            iconos_lista.append("🌧️")
-            
-    if any(n in metar_txt for n in ["BKN00", "OVC00", "BKN010", "OVC010"]):
-        alertas.append("TECHO BAJO")
-        iconos_lista.append("☁️")
-    
-    estado = ", ".join(alertas) if alertas else "NORMAL"
-    icon_final = iconos_lista[0] if iconos_lista else "✅"
-    return estado, icon_final
-
-def obtener_datos():
-    icaos = ",".join(AERODROMOS)
-    headers = {"X-API-Key": API_KEY}
-    try:
-        m = requests.get(f"https://api.checkwx.com/metar/{icaos}", headers=headers).json().get('data', [])
-        t = requests.get(f"https://api.checkwx.com/taf/{icaos}", headers=headers).json().get('data', [])
-        return m, t
-    except: return [], []
+    iconos = []
+    if re.search(r'G(\d{2})', metar_txt): alertas.append("RAFAGAS"); iconos.append("⚠️")
+    if "TS" in metar_txt: alertas.append("TORMENTA"); iconos.append("⛈️")
+    vis = re.search(r' (\d{4}) ', metar_txt)
+    if vis and int(vis.group(1)) <= 3000: alertas.append("BAJA VIS."); iconos.append("🌫️")
+    if any(f in metar_txt for f in ["RA", "DZ", "SN", "FG", "BR"]): 
+        if "BAJA VIS." not in alertas: alertas.append("FENOMENO"); iconos.append("🌧️")
+    if any(n in metar_txt for n in ["BKN00", "OVC00", "BKN010", "OVC010"]): alertas.append("TECHO BAJO"); iconos.append("☁️")
+    return (", ".join(alertas) if alertas else "NORMAL"), (iconos[0] if iconos else "✅")
 
 # --- 5. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
-st.write(f"Estado: **Operativo** | Última Sincronización: **{ahora}**")
+st.write(f"Vigilancia Operativa | **{ahora}**")
 
-metars, tafs = obtener_datos()
-datos = {icao: {"metar": "Sin datos", "taf": "Sin datos"} for icao in AERODROMOS}
-for m in metars:
+# Obtener datos de la API
+try:
+    headers = {"X-API-Key": API_KEY}
+    m_data = requests.get(f"https://api.checkwx.com/metar/{','.join(AERODROMOS)}", headers=headers).json().get('data', [])
+    t_data = requests.get(f"https://api.checkwx.com/taf/{','.join(AERODROMOS)}", headers=headers).json().get('data', [])
+except: m_data, t_data = [], []
+
+datos = {icao: {"m": "Sin datos", "t": "Sin datos"} for icao in AERODROMOS}
+for m in m_data:
     for icao in AERODROMOS:
-        if icao in m: datos[icao]["metar"] = m
-for t in tafs:
+        if icao in m: datos[icao]["m"] = m
+for t in t_data:
     for icao in AERODROMOS:
-        if icao in t: datos[icao]["taf"] = t
+        if icao in t: datos[icao]["t"] = t
 
 cols = st.columns(2)
 for i, icao in enumerate(AERODROMOS):
     info = datos[icao]
-    estado, icono = analizar_enmienda(info["metar"])
+    estado, icono = analizar(info["m"])
     with cols[i % 2]:
         with st.expander(f"{icono} {icao} - {estado}", expanded=True):
-            st.markdown("**METAR**")
-            st.code(info["metar"])
-            st.markdown("**TAF**")
-            st.code(info["taf"])
-            if "SAV" in info["metar"] and "Sin datos" not in info["metar"]:
-                nueva = pd.DataFrame([{"Fecha_Hora": ahora, "OACI": icao, "METAR": info["metar"], "Alerta": estado}])
+            st.code(f"METAR: {info['m']}\n\nTAF: {info['t']}")
+            if "SAV" in info["m"] and "Sin datos" not in info["m"]:
+                nueva = pd.DataFrame([{"Hora": ahora, "OACI": icao, "METAR": info["m"], "Alerta": estado}])
                 st.session_state.historial = pd.concat([st.session_state.historial, nueva], ignore_index=True).drop_duplicates(subset=["OACI", "METAR"])
 
 st.divider()
-st.subheader("📊 Historial de Trazabilidad")
+st.subheader("📊 Historial")
 st.dataframe(st.session_state.historial.tail(10), use_container_width=True)
 
-# --- 6. CRÉDITOS ---
-footer_html = f"""
-<div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px;'>
-    <b>Sistema de Vigilancia FIR SAVC © 2026</b><br>
-    Desarrollado por <b>Gemini AI</b> & <b>RICARTEZ C ANIBAL</b><br>
-    <i>Control de Enmiendas TAF - SMN Argentina.</i>
-</div>
-"""
-st.markdown(footer_html, unsafe_allow_html=True)
+# CRÉDITOS SIMPLES (Sin f-strings complejos para evitar SyntaxError)
+st.markdown("<br><hr><center><b>Monitor FIR SAVC © 2026</b><br>Ferreira & Gemini AI</center>", unsafe_allow_html=True)
