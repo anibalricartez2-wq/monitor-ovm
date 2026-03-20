@@ -3,28 +3,40 @@ import requests
 import pandas as pd
 import re
 from datetime import datetime
+import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Monitor FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS "ESCUDO OPERATIVO": Bloquea la interacción con el header de Streamlit
+# JS INYECTADO: Borra los elementos de administración forzosamente
+components.html("""
+    <script>
+    function hideAdminMenu() {
+        const selectors = [
+            '[data-testid="stHeaderActionElements"]', 
+            '.st-emotion-cache-15ec604', 
+            '.st-emotion-cache-6q9sum',
+            '#MainMenu'
+        ];
+        selectors.forEach(selector => {
+            const elements = window.parent.document.querySelectorAll(selector);
+            elements.forEach(el => el.style.display = 'none');
+        });
+    }
+    // Ejecutar cada segundo para asegurar que no vuelvan a aparecer
+    setInterval(hideAdminMenu, 1000);
+    </script>
+    """, height=0)
+
+# CSS DE APOYO
 st.markdown("""
     <style>
-    /* 1. Ocultar menús y footer de base */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
-
-    /* 2. ANULAR CLICS EN EL HEADER (DERECHA) */
-    /* Esto hace que, aunque veas los botones, no funcionen ni se desplieguen */
-    header[data-testid="stHeader"] {
-        pointer-events: none !important;
-        background: rgba(0,0,0,0) !important;
-    }
-
-    /* 3. INDEPENDENCIA DE LA FLECHA (IZQUIERDA) */
-    /* La rescatamos dándole sus propios clics para que el menú de pantalla funcione */
+    
+    /* RESCATE DE LA FLECHA (IZQUIERDA) */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         position: fixed !important;
@@ -33,26 +45,17 @@ st.markdown("""
         z-index: 1000000 !important;
         background-color: rgba(128, 128, 128, 0.2) !important;
         border-radius: 5px !important;
-        pointer-events: auto !important;
         cursor: pointer !important;
     }
 
-    /* 4. OCULTAR ELEMENTOS DINÁMICOS POR CLASE */
-    /* Atacamos las clases que Streamlit usa para los botones de edición */
-    [data-testid="stHeaderActionElements"] {
-        display: none !important;
-        visibility: hidden !important;
-    }
-
-    /* Espaciado para que el título no se pegue arriba */
+    header {background: transparent !important;}
     .block-container {padding-top: 2.5rem !important;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (CONFIGURACIÓN DE PANTALLA) ---
+# --- 2. BARRA LATERAL (CONFIGURACIÓN) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    # AQUÍ ESTÁ EL SELECTOR DE PANTALLA
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
     st.info("Sincronización automática: 30 min.")
@@ -63,7 +66,7 @@ API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
 # REFRESH CADA 30 MINUTOS (1.800.000 ms)
-st_autorefresh(interval=1800000, key="vigilancia_refresh_30m")
+st_autorefresh(interval=1800000, key="vigilancia_refresh_30m_v2")
 
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Estado", "Motivo"])
@@ -80,7 +83,6 @@ def obtener_datos(icao_list):
         return [], []
 
 def analizar_alerta(metar_txt):
-    # Detecta ráfagas (G) seguidas de números (viento operativo)
     if re.search(r'G\d{2}', metar_txt):
         return "RAFAGAS", "⚠️ ALERTA: Ráfagas detectadas."
     return "NORMAL", "✅ Condición normal."
