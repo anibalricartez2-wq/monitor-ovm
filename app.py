@@ -3,32 +3,21 @@ import requests
 import pandas as pd
 import re
 from datetime import datetime
-import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Monitor FIR SAVC", page_icon="✈️", layout="wide")
 
-# JS: Script para limpiar la interfaz de botones de edición/GitHub
-components.html("""
-    <script>
-    function hideAdmin() {
-        const toHide = ['[data-testid="stHeaderActionElements"]', '#MainMenu', '.stDeployButton', 'header'];
-        toHide.forEach(s => {
-            const el = window.parent.document.querySelectorAll(s);
-            el.forEach(e => e.style.display = 'none');
-        });
-    }
-    setInterval(hideAdmin, 1000);
-    </script>
-    """, height=0)
-
-# CSS: Estética profesional y rescate de la flecha lateral
+# CSS "BÚNKER": Oculta todo lo que no sea el contenido, incluyendo documentación inyectada
 st.markdown("""
     <style>
-    footer {visibility: hidden !important;}
+    /* Ocultar Menús, Footer y cualquier decoración de Streamlit */
+    #MainMenu, footer, .stDeployButton, header {display: none !important; visibility: hidden !important;}
     
-    /* Botón de Menú Lateral (Flecha) */
+    /* Bloquear cualquier inyección de texto de ayuda/documentación al final */
+    .stDocstring, [data-testid="stDocstring"] {display: none !important;}
+
+    /* RESCATE DE LA FLECHA LATERAL */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         position: fixed !important;
@@ -38,33 +27,32 @@ st.markdown("""
         background-color: rgba(255, 255, 255, 0.1) !important;
         border-radius: 8px !important;
         padding: 5px !important;
+        cursor: pointer !important;
     }
 
-    /* Estilo de las tarjetas de aeródromos */
-    .stExpander {
-        border: 1px solid #30363d !important;
-        border-radius: 10px !important;
-        background-color: #0d1117 !important;
-    }
-
-    .block-container {padding-top: 3rem !important;}
+    /* Limpieza de fondo y márgenes */
+    .main {background-color: #0e1117 !important;}
+    .block-container {padding-top: 2rem !important; padding-bottom: 2rem !important;}
+    
+    /* Estilo de tarjetas */
+    .stExpander {border: 1px solid #30363d !important; background-color: #161b22 !important;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (CONFIGURACIÓN) ---
+# --- 2. BARRA LATERAL (PANTALLA) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
-    st.info("🔄 Sincronización: Cada 30 min.")
-    st.warning("⚠️ Uso exclusivo operativo.")
+    st.info("🔄 Ciclo de Sincronización: 30 min.")
+    st.caption("🔒 Uso Exclusivo Operativo")
 
-# --- 3. CONFIGURACIÓN TÉCNICA ---
+# --- 3. LÓGICA DE DATOS ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
 # REFRESH CADA 30 MINUTOS
-st_autorefresh(interval=1800000, key="refresh_30m_final")
+st_autorefresh(interval=1800000, key="refresh_final_30m")
 
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Estado"])
@@ -79,18 +67,14 @@ def obtener_datos(icao_list):
     except: return [], []
 
 def analizar_alerta(metar_txt):
-    if re.search(r'G\d{2}', metar_txt):
-        return "RAFAGAS", "⚠️"
-    if "TS" in metar_txt:
-        return "TORMENTA", "⛈️"
-    if "FG" in metar_txt or "BR" in metar_txt:
-        return "VISIBILIDAD", "🌫️"
+    if re.search(r'G\d{2}', metar_txt): return "RAFAGAS", "⚠️"
+    if "TS" in metar_txt: return "TORMENTA", "⛈️"
     return "NORMAL", "✅"
 
-# --- 4. INTERFAZ PRINCIPAL ---
+# --- 4. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
-st.caption(f"Última actualización de red: **{ahora}** | Comodoro Rivadavia, Argentina")
+st.caption(f"Sincronizado: **{ahora}** | Comodoro Rivadavia")
 
 metars, tafs = obtener_datos(AERODROMOS)
 datos = {icao: {"metar": "Sin datos", "taf": "Sin datos"} for icao in AERODROMOS}
@@ -101,26 +85,32 @@ for t in tafs:
     for icao in AERODROMOS:
         if icao in t: datos[icao]["taf"] = t
 
-# Grilla de Aeródromos con Iconos
 cols = st.columns(2)
 for i, icao in enumerate(AERODROMOS):
     info = datos[icao]
     estado, icono = analizar_alerta(info["metar"])
-    
     with cols[i % 2]:
         with st.expander(f"{icono} {icao} - {estado}", expanded=True):
             st.markdown("**METAR**")
             st.code(info["metar"])
             st.markdown("**TAF**")
             st.code(info["taf"])
-            
-            # Guardar en historial si hay datos reales
-            if "SAV" in info["metar"] and "Sin datos" not in info["metar"]:
+            if "SAV" in info["metar"]:
                 nueva = pd.DataFrame([{"Fecha_Hora": ahora, "OACI": icao, "METAR": info["metar"], "Estado": estado}])
                 st.session_state.historial = pd.concat([st.session_state.historial, nueva], ignore_index=True).drop_duplicates(subset=["OACI", "METAR"])
 
 st.divider()
+st.subheader("📊 Historial Operativo")
+st.dataframe(st.session_state.historial.tail(10), use_container_width=True)
 
-# --- 5. HISTORIAL Y CRÉDITOS ---
-st.subheader("📊 Historial Operativo de Trazabilidad")
-st
+# DERECHOS DE AUTOR - PIE DE PÁGINA
+st.markdown(
+    f"""
+    <div style='text-align: center; color: #8b949e; font-size: 0.8rem; margin-top: 50px; border-top: 1px solid #30363d; padding-top: 20px;'>
+        <b>Monitor Vigilancia FIR SAVC © 2026</b><br>
+        Desarrollado por <b>Gemini AI</b> & <b>[Tu Nombre y Apellido]</b><br>
+        <i>Comodoro Rivadavia, Argentina</i>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
