@@ -8,60 +8,64 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Monitor FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS "OPERATIVO FINAL": Bloquea menús de administrador y libera la flecha de configuración
+# CSS "OPERATIVO BÚNKER": Empuja el header fuera del área visible
 st.markdown("""
     <style>
-    /* Ocultar Menús, Footer y Documentación técnica */
-    #MainMenu, footer, .stDeployButton, .stDocstring, [data-testid="stDocstring"] {
+    /* 1. OCULTAR TODO EL HEADER DE STREAMLIT (CORTE RADICAL) */
+    header[data-testid="stHeader"] {
         display: none !important;
-        visibility: hidden !important;
     }
-
-    /* MATAR LOS BOTONES DE CÓDIGO (DERECHA) SIN ROMPER LA FLECHA */
-    [data-testid="stHeaderActionElements"] {
-        opacity: 0 !important;
-        pointer-events: none !important;
+    
+    /* 2. ELIMINAR FOOTER Y DOCUMENTACIÓN */
+    footer, .stDeployButton, .stDocstring {
         display: none !important;
     }
 
-    /* RESCATE DE LA FLECHA DEL MENÚ LATERAL (IZQUIERDA) */
+    /* 3. RESCATAR LA FLECHA DEL MENÚ LATERAL */
+    /* La creamos como un botón flotante independiente arriba a la izquierda */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
-        visibility: visible !important;
-        z-index: 1000001 !important;
-        background-color: rgba(151, 166, 195, 0.2) !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999 !important;
+        background-color: rgba(151, 166, 195, 0.3) !important;
         border-radius: 5px !important;
-        padding: 4px !important;
+        padding: 5px !important;
+        color: white !important;
     }
 
-    /* Estética de tarjetas y márgenes */
-    .block-container { padding-top: 2.5rem !important; }
+    /* Ajuste de márgenes para que el título no se corte */
+    .block-container { 
+        padding-top: 1rem !important; 
+        margin-top: -30px !important; /* Subimos la app para tapar huecos */
+    }
+    
     .stExpander { border: 1px solid #30363d !important; background-color: #0d1117 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (CONFIGURACIÓN Y CRITERIOS) ---
+# --- 2. BARRA LATERAL (CONTROL) ---
 with st.sidebar:
     st.header("⚙️ Panel de Control")
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     
     st.divider()
-    with st.expander("🔍 Ver Criterios de Alerta", expanded=False):
+    with st.expander("🔍 Criterios de Alerta", expanded=False):
         st.write("**Ráfagas:** Detecta 'G' + 2 dígitos.")
-        st.write("**Tormentas:** Detecta 'TS' en METAR.")
+        st.write("**Tormentas:** Detecta 'TS'.")
         st.write("**Visibilidad:** Detecta 'FG' o 'BR'.")
-        st.caption("Filtros basados en normativa MAPROMA.")
     
     st.divider()
-    st.info("🔄 Sincronización: Cada 30 min.")
+    st.info("🔄 Sincronización: 30 min.")
     st.caption("📍 Comodoro Rivadavia - Argentina")
 
-# --- 3. LÓGICA DE DATOS ---
+# --- 3. MOTOR DE DATOS ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-# REFRESH CONFIGURADO A 30 MINUTOS
-st_autorefresh(interval=1800000, key="refresh_definitivo_savc")
+# REFRESH 30 MINUTOS
+st_autorefresh(interval=1800000, key="refresh_savc_operativo")
 
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Fecha_Hora", "OACI", "METAR", "Estado"])
@@ -84,7 +88,7 @@ def analizar_alerta(metar_txt):
 # --- 4. INTERFAZ ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
-st.write(f"Estado: **Operativo** | Actualizado: **{ahora}**")
+st.write(f"Estado: **En Línea** | Actualizado: **{ahora}**")
 
 metars, tafs = obtener_datos(AERODROMOS)
 datos = {icao: {"metar": "Sin datos", "taf": "Sin datos"} for icao in AERODROMOS}
@@ -110,16 +114,16 @@ for i, icao in enumerate(AERODROMOS):
                 st.session_state.historial = pd.concat([st.session_state.historial, nueva], ignore_index=True).drop_duplicates(subset=["OACI", "METAR"])
 
 st.divider()
-st.subheader("📊 Historial Operativo de Trazabilidad")
+st.subheader("📊 Historial Operativo")
 st.dataframe(st.session_state.historial.tail(10), use_container_width=True)
 
-# DERECHOS DE AUTOR - CRÉDITOS FINALES
+# DERECHOS DE AUTOR
 st.markdown(
     f"""
     <div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px;'>
         <b>Sistema de Vigilancia FIR SAVC © 2026</b><br>
-        Desarrollado por <b>Gemini AI</b> & <b>Ferreira</b><br>
-        <i>Comodoro Rivadavia, Argentina. Todos los derechos reservados.</i>
+        Desarrollado por <b>Gemini AI</b> & <b>[Tu Nombre y Apellido]</b><br>
+        <i>Todos los derechos reservados.</i>
     </div>
     """, 
     unsafe_allow_html=True
