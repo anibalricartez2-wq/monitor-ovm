@@ -8,7 +8,7 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Monitor FIR SAVC", layout="wide")
 
-# --- 2. ESTILO CSS (MODO NOCHE Y UNIFICACIÓN VISUAL) ---
+# --- 2. ESTILO CSS ---
 st.markdown("""
     <style>
     header, footer, .stDeployButton { display: none !important; }
@@ -62,9 +62,8 @@ def analizar_enmienda(metar_txt):
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-st_autorefresh(interval=1800000, key="refresh_v11_unificado")
+st_autorefresh(interval=1800000, key="refresh_v12_final")
 
-# Historial con nombres en español
 if 'historial' not in st.session_state:
     st.session_state.historial = pd.DataFrame(columns=["Hora", "Estación", "Reporte METAR", "Estado/Alerta"])
 
@@ -86,7 +85,7 @@ with st.container():
 
 st.divider()
 
-# Obtención de datos
+# Obtención de datos corregida
 try:
     headers = {"X-API-Key": API_KEY}
     m_data = requests.get(f"https://api.checkwx.com/metar/{','.join(AERODROMOS)}", headers=headers).json().get('data', [])
@@ -98,7 +97,7 @@ datos = {icao: {"m": "Sin datos", "t": "Sin datos"} for icao in AERODROMOS}
 for m in m_data:
     for icao in AERODROMOS:
         if icao in m: datos[icao]["m"] = m
-for t in taf_data := t_data:
+for t in t_data:
     for icao in AERODROMOS:
         if icao in t: datos[icao]["t"] = t
 
@@ -114,7 +113,6 @@ for i, icao in enumerate(AERODROMOS):
             st.markdown("**TAF**")
             st.code(info["t"])
             
-            # Registro en historial (Unificado en Español)
             if "SAV" in info["m"] and "Sin datos" not in info["m"]:
                 nueva_fila = pd.DataFrame([{
                     "Hora": datetime.now().strftime('%H:%M'), 
@@ -126,14 +124,13 @@ for i, icao in enumerate(AERODROMOS):
 
 st.divider()
 st.subheader("📊 Historial de la Guardia")
-# Mostramos la tabla unificada
 st.dataframe(st.session_state.historial.tail(15), use_container_width=True)
 
 # --- 6. CRÉDITOS ---
 footer_html = """
 <div style='text-align: center; color: #8b949e; font-size: 0.85rem; border-top: 1px solid #30363d; padding-top: 20px; margin-top: 30px;'>
     <b>Sistema de Vigilancia FIR SAVC © 2026</b><br>
-    Desarrollado por <b>Gemini AI</b> & <b>RICARTEZ ANIBAL</b><br>
+    Desarrollado por <b>Gemini AI</b> & <b>Ferreira</b><br>
     <i>Control de Enmiendas TAF según Manual SMN Argentina.</i>
 </div>
 """
