@@ -8,60 +8,68 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS "MURO DE BERLÍN": Bloquea el menú de la derecha y libera la izquierda
+# CSS "BLOQUEO RADICAL"
 st.markdown("""
     <style>
-    /* 1. Ocultar Menú de Hamburguesa y Footer */
+    /* 1. Ocultar menús estándar */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
 
-    /* 2. BLOQUEO TOTAL DEL CONTENEDOR DE 'VIEW SOURCE' */
-    /* Esto anula cualquier botón que Streamlit quiera poner a la derecha */
-    [data-testid="stHeaderActionElements"] {
-        display: none !important;
-        width: 0px !important;
-        height: 0px !important;
+    /* 2. CREAR UN ESCUDO INVISIBLE SOBRE EL HEADER */
+    /* Este bloque tapa toda la parte superior derecha para que no puedas clickear el menú de código */
+    header::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 80%; /* Tapa el 80% de la derecha */
+        height: 60px;
+        background-color: transparent;
+        z-index: 999998;
+        pointer-events: all; /* Captura los clics y no los deja pasar al menú */
     }
 
-    /* 3. LIBERAR LA FLECHA DE LA IZQUIERDA (SIDEBAR) */
-    /* Le damos prioridad y una posición clara para que responda al clic */
+    /* 3. ASEGURAR QUE LA FLECHA DE LA IZQUIERDA FUNCIONE */
+    /* La ponemos por encima de todo para que sea lo único cliqueable arriba */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         position: fixed !important;
-        top: 15px !important;
-        left: 15px !important;
-        z-index: 999999 !important;
-        background-color: rgba(128, 128, 128, 0.1) !important;
-        border: 1px solid rgba(128, 128, 128, 0.2) !important;
+        top: 10px !important;
+        left: 10px !important;
+        z-index: 999999 !important; /* El nivel más alto */
+        background-color: rgba(128, 128, 128, 0.2) !important;
         border-radius: 5px !important;
+        cursor: pointer !important;
     }
 
-    /* 4. Limpiar el fondo del header para que no moleste */
+    /* 4. Ocultar visualmente los elementos del header */
+    [data-testid="stHeaderActionElements"] {
+        display: none !important;
+    }
+    
     header {
         background-color: rgba(0,0,0,0) !important;
     }
 
-    /* Margen superior para el título */
     .block-container {padding-top: 3.5rem !important;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (MENÚ DE PANTALLA) ---
+# --- 2. BARRA LATERAL (CONFIGURACIÓN) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    # Aquí tenés tu selector de pantalla
+    # Selector de pantalla restaurado y funcional
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
-    st.info("Actualización: cada 15 min.")
-    st.caption(f"🚀 Desarrollado por: Gemini AI & [Tu Nombre y Apellido]")
+    st.info("Actualización automática cada 15 min.")
+    st.caption(f"🚀 Desarrollado por: Gemini AI & ANIBAL RICARTEZ")
 
 # --- 3. CONFIGURACIÓN TÉCNICA ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
-# Refresco cada 15 min
 st_autorefresh(interval=900000, key="vigilancia_refresh")
 
 if 'historial' not in st.session_state:
@@ -79,12 +87,12 @@ def obtener_datos(icao_list):
         return [], []
 
 def analizar_alerta(metar_txt):
-    # Detecta ráfagas solo si hay 'G' seguido de números (ej: 25015G25KT)
+    # Detecta ráfagas (G) seguidas de números (viento operativo)
     if re.search(r'G\d{2}', metar_txt):
         return "RAFAGAS", "⚠️ ALERTA: Ráfagas detectadas."
     return "NORMAL", "✅ Condición normal."
 
-# --- 5. INTERFAZ ---
+# --- 5. INTERFAZ PRINCIPAL ---
 st.title("🖥️ Monitor de Vigilancia FIR SAVC")
 ahora = datetime.now().strftime('%H:%M:%S')
 st.write(f"Última sincronización: **{ahora}** (Reseteo API: 21:00 hs)")
