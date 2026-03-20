@@ -8,41 +8,50 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia FIR SAVC", page_icon="✈️", layout="wide")
 
-# CSS REFORMULADO: Header invisible pero funcional para que la flecha responda
+# CSS "MURO DE BERLÍN": Bloquea el menú de la derecha y libera la izquierda
 st.markdown("""
     <style>
-    /* Ocultar menús de desarrollo y footer */
+    /* 1. Ocultar Menú de Hamburguesa y Footer */
     #MainMenu {visibility: hidden !important;}
     footer {visibility: hidden !important;}
     .stDeployButton {display:none !important;}
-    
-    /* VOLVER INVISIBLE EL HEADER PERO NO BORRARLO (Para que la flecha funcione) */
+
+    /* 2. BLOQUEO TOTAL DEL CONTENEDOR DE 'VIEW SOURCE' */
+    /* Esto anula cualquier botón que Streamlit quiera poner a la derecha */
+    [data-testid="stHeaderActionElements"] {
+        display: none !important;
+        width: 0px !important;
+        height: 0px !important;
+    }
+
+    /* 3. LIBERAR LA FLECHA DE LA IZQUIERDA (SIDEBAR) */
+    /* Le damos prioridad y una posición clara para que responda al clic */
+    [data-testid="stSidebarCollapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999 !important;
+        background-color: rgba(128, 128, 128, 0.1) !important;
+        border: 1px solid rgba(128, 128, 128, 0.2) !important;
+        border-radius: 5px !important;
+    }
+
+    /* 4. Limpiar el fondo del header para que no moleste */
     header {
         background-color: rgba(0,0,0,0) !important;
-        color: rgba(0,0,0,0) !important;
-    }
-    
-    /* OCULTAR ESPECÍFICAMENTE EL BOTÓN DE VER CÓDIGO (DERECHA) */
-    header [data-testid="stHeaderActionElements"] {
-        display: none !important;
     }
 
-    /* ASEGURAR QUE LA FLECHA DE LA IZQUIERDA SE VEA Y SEA CLIQUEABLE */
-    [data-testid="stSidebarCollapsedControl"] {
-        background-color: rgba(128, 128, 128, 0.2) !important;
-        border-radius: 5px !important;
-        color: inherit !important;
-    }
-
-    /* Espaciado para el contenido */
-    .block-container {padding-top: 2rem !important;}
+    /* Margen superior para el título */
+    .block-container {padding-top: 3.5rem !important;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. BARRA LATERAL (CONFIGURACIÓN) ---
+# --- 2. BARRA LATERAL (MENÚ DE PANTALLA) ---
 with st.sidebar:
     st.header("⚙️ Configuración")
-    # OPCIÓN DE PANTALLA REESTABLECIDA
+    # Aquí tenés tu selector de pantalla
     tema = st.selectbox("Modo de Pantalla:", ["Sistema", "Día", "Noche"], index=0)
     st.divider()
     st.info("Actualización: cada 15 min.")
@@ -52,6 +61,7 @@ with st.sidebar:
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAVC","SAWC","SAWG","SAWE","SAWH"]
 
+# Refresco cada 15 min
 st_autorefresh(interval=900000, key="vigilancia_refresh")
 
 if 'historial' not in st.session_state:
@@ -69,7 +79,7 @@ def obtener_datos(icao_list):
         return [], []
 
 def analizar_alerta(metar_txt):
-    # Mejora: Busca "G" seguido de números (ej: 28015G25KT) para evitar falsos positivos
+    # Detecta ráfagas solo si hay 'G' seguido de números (ej: 25015G25KT)
     if re.search(r'G\d{2}', metar_txt):
         return "RAFAGAS", "⚠️ ALERTA: Ráfagas detectadas."
     return "NORMAL", "✅ Condición normal."
@@ -119,7 +129,7 @@ if not st.session_state.historial.empty:
 st.markdown("---")
 st.markdown(
     f"<div style='text-align: center; color: gray; font-size: 0.8rem;'>"
-    f"Monitor FIR SAVC desarrollado por <b>Gemini AI</b> & <b>RICARTEZ ANIBAL</b><br>"
+    f"Monitor FIR SAVC desarrollado por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>"
     f"Comodoro Rivadavia, Argentina - 2026"
     f"</div>", 
     unsafe_allow_html=True
