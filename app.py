@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-import pd
+import pandas as pd  # <--- Corregido: importación completa
 from datetime import datetime
 from streamlit_autorefresh import st_autorefresh
 
@@ -31,7 +31,7 @@ with st.sidebar:
     tema = st.selectbox("Modo de Pantalla:", ["Día", "Noche", "Sistema"], index=2)
     st.divider()
     st.info("Actualización automática cada 15 min.")
-    st.caption("🚀 Desarrollado por: Inteligencia Artificial & [Tu Nombre y Apellido]")
+    st.caption("🚀 Desarrollado por: Gemini AI & [Tu Nombre y Apellido]")
 
 # --- 3. CONFIGURACIÓN TÉCNICA ---
 API_KEY = "8e7917816866402688f805f637eb54d3"
@@ -110,7 +110,7 @@ if not st.session_state.historial.empty:
     csv = st.session_state.historial.to_csv(index=False).encode('utf-8')
     st.download_button("📥 Descargar Reporte (.csv)", data=csv, file_name=f"trazabilidad_{datetime.now().strftime('%d-%m-%Y')}.csv")
 
-# FIRMA PERSONALIZADA
+# FIRMA PERSONALIZADA (Reemplazá aquí con tu nombre)
 st.markdown("---")
 st.markdown(
     f"""
