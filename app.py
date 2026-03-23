@@ -160,14 +160,12 @@ if st.session_state.log_desviaciones:
     st.divider()
     df_log = pd.DataFrame(st.session_state.log_desviaciones)
     
-    # Manejo de Excel con motor seguro
     output = io.BytesIO()
     try:
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df_log.to_excel(writer, index=False, sheet_name='Log')
         excel_data = output.getvalue()
     except:
-        # Fallback si xlsxwriter falla
         excel_data = df_log.to_csv(index=False).encode('utf-8')
 
     c1, c2 = st.columns([4, 1])
@@ -176,3 +174,12 @@ if st.session_state.log_desviaciones:
         st.download_button("📥 Descargar", excel_data, 
                            file_name=f"Vigilancia_{datetime.now().strftime('%H%M')}.xlsx")
     st.table(df_log.tail(5))
+
+# --- 6. CRÉDITOS (FOOTER) ---
+st.markdown(f"""
+    <hr>
+    <div style="text-align: center; color: #777; font-size: 0.85rem; padding: 10px;">
+        Desarrollado en colaboración por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>
+        © {datetime.now().year} - Sistema de Vigilancia Aeronáutica (Criterios de Enmienda SMN)
+    </div>
+""", unsafe_allow_html=True)
