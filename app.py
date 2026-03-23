@@ -179,7 +179,7 @@ if st.session_state.log_desviaciones:
 st.markdown(f"""
     <hr>
     <div style="text-align: center; color: #777; font-size: 0.85rem; padding: 10px;">
-        Desarrollado en colaboración por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>
-        © {datetime.now().year} - Sistema de Vigilancia Aeronáutica (Criterios de Enmienda SMN)
+        Desarrollado en colaboración por <b>Gemini AI</b> & <b>Anibal Ricartez</b><br>
+        © {datetime.now().year} - Sistema de Vigilancia Aeronáutica version de prueba, herramienta creada para aux de pronosticos (Criterios de Enmienda SMN)
     </div>
 """, unsafe_allow_html=True)
