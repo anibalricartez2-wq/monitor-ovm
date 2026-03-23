@@ -8,8 +8,10 @@ from datetime import datetime, timezone
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Vigilancia SAVC v5.8", page_icon="✈️", layout="wide")
-st_autorefresh(interval=1800000, key="auto_refresh")
+st.set_page_config(page_title="Vigilancia SAVC v5.9", page_icon="✈️", layout="wide")
+
+# Refresco automático cada 3 minutos (180,000 ms)
+st_autorefresh(interval=180000, key="auto_refresh")
 
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAWC","SAVC","SAWG","SAWE","SAWH"]
@@ -30,13 +32,11 @@ def get_clima_icon(metar):
     if "SQ" in metar: return "💨"      # Turbonada
     if "FC" in metar: return "🌪️"      # Nube de embudo / Tornado
     
-    # Nubosidad para el estado general
     if "OVC" in metar: return "☁️"     # Cubierto
     if "BKN" in metar: return "🌥️"     # Nuboso
     if "SCT" in metar: return "⛅"     # Parcialmente nublado
     if "FEW" in metar: return "🌤️"     # Algo de nubes
     if any(x in metar for x in ["CAVOK", "SKC", "NSC"]): return "☀️"
-    
     return "✈️"
 
 def get_token_vis(texto):
@@ -57,7 +57,7 @@ def get_cloud_ceiling(texto):
     return 10000
 
 def get_wind_data(texto):
-    """Extracción de viento para criterios de dirección y velocidad."""
+    """Extracción de viento."""
     m = re.search(r'(\d{3})(\d{2})(G\d{2})?KT', texto)
     if m:
         dir_v = int(m.group(1))
@@ -86,7 +86,7 @@ def auditar_smn(icao, metar, taf_raw):
     alertas = []
     p_vigente = obtener_bloque_vigente(taf_raw)
     
-    # Visibilidad: Umbrales 150, 350, 600, 800, 1500, 3000, 5000
+    # Visibilidad
     vm, vp = get_token_vis(metar), get_token_vis(p_vigente)
     u_vis = [150, 350, 600, 800, 1500, 3000, 5000]
     ev_m = next((i for i, u in enumerate(u_vis) if vm < u), 8)
@@ -94,7 +94,7 @@ def auditar_smn(icao, metar, taf_raw):
     if ev_m != ev_p and not (vm >= 9999 and vp >= 5000):
         alertas.append(f"VIS: Cambio umbral (M: {vm}m / T: {vp}m)")
 
-    # Techo de Nubes: BKN u OVC (100, 200, 500, 1000, 1500 ft)
+    # Techo de Nubes
     cm, cp = get_cloud_ceiling(metar), get_cloud_ceiling(p_vigente)
     u_cld = [100, 200, 500, 1000, 1500]
     ec_m = next((i for i, u in enumerate(u_cld) if cm < u), 6)
@@ -102,7 +102,7 @@ def auditar_smn(icao, metar, taf_raw):
     if ec_m != ec_p:
         alertas.append(f"NUBES: Techo fuera umbral (M: {cm}ft / T: {cp}ft)")
 
-    # Viento: Dirección (>=60°) y Velocidad (>=10kt)
+    # Viento
     dm, vm_v = get_wind_data(metar)
     dp, vp_v = get_wind_data(p_vigente)
     if dm is not None and dp is not None:
@@ -111,25 +111,23 @@ def auditar_smn(icao, metar, taf_raw):
         if abs(vm_v - vp_v) >= 10:
             alertas.append(f"VIENTO: Vel >= 10kt (M: {vm_v}kt / T: {vp_v}kt)")
 
-    # Registro en Log (Evita duplicados consecutivos)
     for a in alertas:
         entry = {
-            "Fecha/Hora (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
-            "Aeródromo": icao,
+            "Hora (UTC)": datetime.now(timezone.utc).strftime("%H:%M"),
+            "OACI": icao,
             "Desviación": a,
             "METAR": metar
         }
         if not st.session_state.log_desviaciones or \
-           not (st.session_state.log_desviaciones[-1]["Aeródromo"] == icao and \
+           not (st.session_state.log_desviaciones[-1]["OACI"] == icao and \
                 st.session_state.log_desviaciones[-1]["Desviación"] == a):
             st.session_state.log_desviaciones.append(entry)
 
     return alertas, p_vigente
 
-# --- 4. INTERFAZ DE USUARIO ---
+# --- 4. INTERFAZ ---
 
-st.title("✈️ Monitor de Vigilancia FIR SAVC")
-st.write(f"Actualización automática cada 30 min. Hora actual (UTC): {datetime.now(timezone.utc).strftime('%H:%M')}")
+st.title("✈️ Vigilancia FIR SAVC (Norma SMN)")
 
 try:
     headers = {"X-API-Key": API_KEY}
@@ -149,40 +147,32 @@ try:
                 weather_emoji = get_clima_icon(m_r)
                 
                 with st.expander(f"{status_emoji} {weather_emoji} {icao}", expanded=True):
-                    st.markdown("**ANÁLISIS VIGENTE (TAF):**")
-                    st.warning(p_vigente)
-                    
-                    for a in alertas:
-                        st.error(a)
-                    
-                    st.markdown("**REPORTES COMPLETOS:**")
-                    st.success(f"METAR: {m_r}")
-                    st.text_area(f"Secuencia TAF {icao}:", t_r, height=120, key=f"txt_{icao}")
-            else:
-                st.info(f"Esperando datos de {icao}...")
+                    st.warning(f"**VIGENTE:** {p_vigente}")
+                    for a in alertas: st.error(a)
+                    st.success(f"**METAR:** {m_r}")
+                    st.text_area(f"TAF {icao}:", t_r, height=110, key=f"t_{icao}")
 
 except Exception as e:
-    st.error(f"Error de conexión o API: {e}")
+    st.error(f"Error: {e}")
 
-# --- 5. HISTORIAL Y DESCARGA ---
+# --- 5. LOG Y EXCEL ---
 if st.session_state.log_desviaciones:
     st.divider()
     df_log = pd.DataFrame(st.session_state.log_desviaciones)
     
-    # Generar Excel en memoria
+    # Manejo de Excel con motor seguro
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_log.to_excel(writer, index=False, sheet_name='Desviaciones_SMN')
-    
-    col_t, col_d = st.columns([4, 1])
-    with col_t:
-        st.subheader("📊 Historial de Desviaciones detectadas")
-    with col_d:
-        st.download_button(
-            label="📥 Descargar Excel",
-            data=output.getvalue(),
-            file_name=f"Log_Vigilancia_{datetime.now().strftime('%d%m_%H%M')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    
-    st.table(df_log.tail(10))
+    try:
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_log.to_excel(writer, index=False, sheet_name='Log')
+        excel_data = output.getvalue()
+    except:
+        # Fallback si xlsxwriter falla
+        excel_data = df_log.to_csv(index=False).encode('utf-8')
+
+    c1, c2 = st.columns([4, 1])
+    with c1: st.subheader("📊 Log de Desviaciones")
+    with c2: 
+        st.download_button("📥 Descargar", excel_data, 
+                           file_name=f"Vigilancia_{datetime.now().strftime('%H%M')}.xlsx")
+    st.table(df_log.tail(5))
