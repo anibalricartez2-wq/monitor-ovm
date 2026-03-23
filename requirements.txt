@@ -3,3 +3,4 @@ requests
 pandas
 xlsxwriter
 streamlit-autorefresh
+google-generativeai
