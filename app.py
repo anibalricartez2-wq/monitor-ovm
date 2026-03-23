@@ -6,6 +6,14 @@ import pandas as pd
 import io
 from datetime import datetime, timezone
 from streamlit_autorefresh import st_autorefresh
+import google.generativeai as genai
+import streamlit as st
+
+# Configuramos la IA con la llave que copiaste
+genai.configure(api_key="AIzaSyBGUbf-zLMmeL1h9_sUKQj_hYfXobXIW-E")
+
+# Creamos el modelo (podes usar flash que es más rápido)
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia SAVC v5.9", page_icon="✈️", layout="wide")
