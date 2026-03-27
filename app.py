@@ -188,6 +188,6 @@ st.markdown(f"""
     <hr>
     <div style="text-align: center; color: #777; font-size: 0.85rem; padding: 10px;">
         Desarrollado en colaboración por <b>Gemini AI</b> & <b>Anibal Ricartez</b><br>
-        © {datetime.now().year} - HERRAMIENTA CREADA PARA AUXILIARES DE PRONOSTICO (Criterios de Enmienda CON BASES EN DOCUMENTO SMN)
+        © {datetime.now().year} - HERRAMIENTA CREADA PARA AUXILIARES DE PRONOSTICO (Criterios de Enmienda segun documento SMN)
     </div>
 """, unsafe_allow_html=True)
