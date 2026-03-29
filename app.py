@@ -208,5 +208,5 @@ with c_term:
     else: st.info("Esperando datos térmicos...")
 
 st.markdown(f"""<hr><div style="text-align: center; color: #777; font-size: 0.8rem;">
-    Desarrollado en colaboración por <b>Gemini AI</b> & <b>Tu Usuario</b><br>
-    © {datetime.now().year} - Vigilancia Aeronáutica SAVC</div>""", unsafe_allow_html=True)
+    Desarrollado en colaboración por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>
+    © {datetime.now().year} - Vigilancia Aeronáutica SAVC/HERRAMIENTA DISEÑADA PARA AUXILIARES DE PRONOSTICO</div>""", unsafe_allow_html=True)
