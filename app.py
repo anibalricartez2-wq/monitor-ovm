@@ -10,8 +10,8 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia SAVC v6.3", page_icon="✈️", layout="wide")
 
-# Refresco automático cada 3 minutos para monitoreo en tiempo real
-st_autorefresh(interval=180000, key="auto_refresh")
+# Refresco automático cada 30 minutos para monitoreo en tiempo real
+st_autorefresh(interval=1800000, key="auto_refresh")
 
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAWC","SAVC","SAWG","SAWE","SAWH"]
@@ -198,5 +198,5 @@ with c_temp:
 
 # --- FOOTER ---
 st.markdown(f"""<hr><div style="text-align: center; color: #777; font-size: 0.8rem;">
-    Desarrollado en colaboración por <b>Gemini AI</b> & <b>Tu Usuario</b><br>
-    © {datetime.now().year} - Vigilancia Aeronáutica SAVC</div>""", unsafe_allow_html=True)
+    Desarrollado en colaboración por <b>Gemini AI</b> & <b>ANIBAL RICARTERZ</b><br>
+    © {datetime.now().year} - Vigilancia Aeronáutica SAVC HERRAMIENTA DESARROLLADA PARA EL AUXILIAR DE PRONOSTICOS</div>""", unsafe_allow_html=True)
