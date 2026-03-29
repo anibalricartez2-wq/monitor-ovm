@@ -18,8 +18,8 @@ model = genai.GenerativeModel('gemini-1.5-flash')
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia SAVC v5.9", page_icon="✈️", layout="wide")
 
-# Refresco automático cada 3 minutos (180,000 ms)
-st_autorefresh(interval=180000, key="auto_refresh")
+# Refresco automático cada 30 minutos (180,000 ms)
+st_autorefresh(interval=1800000, key="auto_refresh")
 
 API_KEY = "8e7917816866402688f805f637eb54d3"
 AERODROMOS = ["SAVV","SAVE","SAVT","SAWC","SAVC","SAWG","SAWE","SAWH"]
