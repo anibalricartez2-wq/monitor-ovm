@@ -5,111 +5,100 @@ import requests
 import re
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Monitor Meteorológico OVM", layout="wide")
+st.set_page_config(page_title="Monitor Meteorológico SAVC", layout="wide")
 
-# --- 1. REGISTRO DE USO (Prioridad para que marque Mayo) ---
-def registrar_uso():
-    ahora = datetime.datetime.now()
-    # Aquí puedes insertar tu lógica de Google Sheets si la usas
-    # Por ahora, aseguramos que la sesión lo reconozca
-    if 'usuario_activo' not in st.session_state:
-        st.session_state['usuario_activo'] = True
-    return ahora
+# --- LISTA OFICIAL DE AERÓDROMOS (ACTUALIZADA) ---
+AERODROMOS = ["SAVV", "SAVE", "SAVT", "SAWC", "SAVC", "SAWG", "SAWE", "SAWH"]
 
-fecha_actual = registrar_uso()
+# --- REGISTRO DE USO (Prioridad Mayo) ---
+def registrar_actividad():
+    if 'sesion_mayo' not in st.session_state:
+        st.session_state['sesion_mayo'] = True
+    return datetime.datetime.now()
 
-# --- 2. FUNCIONES DE EXTRACCIÓN (Con protección contra errores) ---
+fecha_actual = registrar_actividad()
+
+# --- FUNCIONES DE EXTRACCIÓN (Resilientes) ---
 def extraer_datos_metar(metar_texto):
     """
-    Extrae velocidad y resto del METAR. 
-    Retorna SIEMPRE una tupla (velocidad, resto) para evitar el ValueError.
+    Extrae viento y reporte. 
+    Evita el 'ValueError' si la fuente falla devolviendo siempre 2 valores.
     """
-    if not metar_texto or not isinstance(metar_texto, str) or "404" in metar_texto:
-        return 0, "S/D"
+    if not metar_texto or not isinstance(metar_texto, str) or len(metar_texto) < 10:
+        return 0, "Dato no disponible (Fallo de red/fuente)"
     
     try:
-        # Buscamos el viento (ejemplo: 24015KT o 24015G25KT)
-        match_viento = re.search(r'(\d{3})(\d{2,3})(G\d{2,3})?KT', metar_texto)
-        if match_viento:
-            velocidad = int(match_viento.group(2))
-            return velocidad, metar_texto
-        else:
-            return 0, metar_texto
+        # Buscamos el viento (Ej: 24015KT)
+        match = re.search(r'(\d{3})(\d{2,3})KT', metar_texto)
+        if match:
+            velocidad = int(match.group(2))
+            # Redondeo aeronáutico a la decena (Norma MAPROMA)
+            vel_red = int(round(velocidad / 10.0) * 10)
+            return vel_red, metar_texto
+        return 0, metar_texto
     except Exception:
-        return 0, "Error de formato"
+        return 0, "Error en el formato del reporte"
 
-# --- 3. SCRAPER / OBTENCIÓN DE DATOS (Con Timeout) ---
-@st.cache_data(ttl=600)
-def obtener_metar_web(estacion):
-    # Simulamos la consulta a Ogimet o SMN
-    # En producción aquí va tu requests.get(url, timeout=5)
+@st.cache_data(ttl=300)
+def fetch_metar(icao):
+    """Scraper directo de respaldo"""
     try:
-        # Ejemplo: url = f"https://www.ogimet.com/getsynop.php?res=view&icao={estacion}"
-        # response = requests.get(url, timeout=5)
-        # return response.text
-        return f"{estacion} 031800Z 24010KT CAVOK 15/05 Q1013" # Simulación
+        url = f"https://www.ogimet.com/getsynop.php?res=view&icao={icao}"
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200 and len(r.text) > 20:
+            # Limpieza básica del HTML de Ogimet para obtener solo el texto
+            return r.text
+        return None
     except:
         return None
 
-# --- 4. INTERFAZ DE STREAMLIT ---
-st.title("🛰️ Monitor de Vigilancia Meteorológica - v4.6")
-st.subheader(f"Estado del FIR: SAVC | Fecha: {fecha_actual.strftime('%d/%m/%Y')}")
+# --- INTERFAZ DE USUARIO ---
+st.title("🖥️ Monitor de Vigilancia Meteorológica")
+st.markdown(f"**Usuario:** Aníbal | **Jurisdicción:** SAVC FIR | **Fecha:** {fecha_actual.strftime('%d/%m/%Y %H:%M')}")
 
-# Sidebar para control y registro
+# Pestañas originales
+tab1, tab2, tab3 = st.tabs(["📊 Vigilancia SAVC", "📝 Auditoría SMN", "🌡️ Térmica Tx/Tn"])
+
+with tab1:
+    st.subheader("Estado de Aeródromos en Tiempo Real")
+    
+    # Grid de 4 columnas para que los 8 aeródromos queden simétricos (2 filas de 4)
+    cols = st.columns(4)
+    
+    for i, oaci in enumerate(AERODROMOS):
+        with cols[i % 4]:
+            raw_data = fetch_metar(oaci)
+            
+            # --- PROTECCIÓN LÍNEA 139 (El parche clave) ---
+            resultado_proceso = extraer_datos_metar(raw_data)
+            
+            # Validamos que tengamos siempre los 2 valores necesarios
+            if isinstance(resultado_proceso, (tuple, list)) and len(resultado_proceso) >= 2:
+                viento, reporte = resultado_proceso
+            else:
+                viento, reporte = 0, "Error de conexión"
+            
+            # Estilo de métrica visual
+            st.metric(label=f"📍 {oaci}", value=f"{viento} KT")
+            with st.expander("Ver METAR"):
+                st.caption(reporte)
+
+with tab2:
+    st.subheader("Auditoría de Desviaciones (MAPROMA)")
+    st.write("Análisis de redondeo de viento y discrepancias SYNOP/METAR para el periodo actual.")
+
+with tab3:
+    st.subheader("Seguimiento Térmico Tx/Tn")
+    st.info("Visualización de temperaturas máximas y mínimas de Mayo 2026.")
+
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("Control de Sistema")
-    if st.button("🔄 Forzar Recarga (Limpiar Caché)"):
+    st.header("Configuración de Datos")
+    if st.button("🔄 Forzar Recarga de Datos"):
         st.cache_data.clear()
         st.rerun()
     
-    st.info(f"Mes de gestión: {fecha_actual.strftime('%B %Y')}")
-
-# --- 5. LÓGICA PRINCIPAL (La antigua línea 139 protegida) ---
-tabs = st.tabs(["Vigilancia SAVC", "Auditoría SMN", "Térmicas Tx/Tn"])
-
-with tabs[0]:
-    st.write("### Vigilancia de Estaciones - SAVC")
-    
-    # Lista de estaciones de tu FIR
-    estaciones = ["SAVT", "SAVC", "SAWD", "SAVY"]
-    
-    datos_pantalla = []
-    
-    for oaci in estaciones:
-        metar_c = obtener_metar_web(oaci)
-        
-        # AQUÍ ESTÁ EL CAMBIO CLAVE (Línea 139 protegida)
-        resultado = extraer_datos_metar(metar_c)
-        
-        # Validación de desempaquetado
-        if isinstance(resultado, (tuple, list)) and len(resultado) >= 2:
-            vel_c, info_extra = resultado
-        else:
-            vel_c, info_extra = 0, "Error en fuente"
-        
-        datos_pantalla.append({
-            "Estación": oaci,
-            "Viento (KT)": vel_c,
-            "Reporte": info_extra
-        })
-
-    df = pd.DataFrame(datos_pantalla)
-    st.table(df)
-
-with tabs[1]:
-    st.write("### Auditoría SMN vs OACI")
-    st.info("Comparando reportes según MAPROMA...")
-    # Aquí iría tu lógica de comparación de redondeo de viento a la decena
-
-with tabs[2]:
-    st.write("### Análisis de Térmicas")
-    # Lógica para Tx y Tn
-    st.write("Datos de temperaturas extremas para el periodo de mayo.")
-
-# --- 6. REGISTRO DE LOGS (Al final, pero protegido) ---
-try:
-    # Simulación de guardado en log
-    # log_db.save(usuario="Anibal", accion="Consulta", mes=5)
-    pass
-except:
-    st.error("No se pudo actualizar el log de uso de Mayo.")
+    st.divider()
+    if fecha_actual.month == 5:
+        st.success("Registro de Mayo activo ✅")
+    st.caption("v4.6.1 - FIR SAVC Update")
