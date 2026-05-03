@@ -11,7 +11,7 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="Vigilancia SAVC v6.6", page_icon="✈️", layout="wide")
 
 # Refresco cada 3 minutos (180,000 ms) para mantener los datos al día
-st_autorefresh(interval=180000, key="auto_refresh")
+st_autorefresh(interval=1800000, key="auto_refresh")
 
 API_KEY = "8e7917816866402688f805f637eb54d3"
 # Tu lista exacta de 8 aeródromos
