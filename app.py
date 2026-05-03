@@ -10,27 +10,25 @@ from streamlit_autorefresh import st_autorefresh
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Vigilancia SAVC v6.6", page_icon="✈️", layout="wide")
 
-# Refresco cada 3 minutos para mantener la app viva y los logs actualizados
+# Refresco cada 3 minutos (180,000 ms)
 st_autorefresh(interval=180000, key="auto_refresh")
 
 API_KEY = "8e7917816866402688f805f637eb54d3"
-# Lista actualizada según tus requerimientos
-AERODROMOS = ["SAVV","SAVE","SAVT","SAWC","SAVC","SAWG","SAWE","SAWH"]
+AERODROMOS = ["SAVV", "SAVE", "SAVT", "SAWC", "SAVC", "SAWG", "SAWE", "SAWH"]
 ICAO_STRING = ",".join(AERODROMOS)
 
-# --- 2. MEMORIA DE SESIÓN Y REGISTRO DE MAYO ---
+# --- 2. MEMORIA DE SESIÓN (Persistencia de Logs y Mayo) ---
 if 'log_desviaciones' not in st.session_state:
     st.session_state.log_desviaciones = []
 if 'extremas' not in st.session_state:
-    st.session_state.extremas = {} 
+    st.session_state.extremas = {}
+if 'registro_mayo' not in st.session_state:
+    st.session_state.registro_mayo = True
 
-# Registro de uso para el dashboard de control
-if 'uso_mayo_registrado' not in st.session_state:
-    st.session_state.uso_mayo_registrado = True
-
-# --- 3. FUNCIONES TÉCNICAS (CON BLINDAJE) ---
+# --- 3. FUNCIONES TÉCNICAS (Blindadas contra datos vacíos) ---
 
 def calcular_dif_angular(dir1, dir2):
+    if dir1 is None or dir2 is None: return 0
     diff = abs(dir1 - dir2)
     return diff if diff <= 180 else 360 - diff
 
@@ -81,7 +79,7 @@ def get_clima_icon(metar):
     return "✈️"
 
 def obtener_bloque_vigente(taf_raw):
-    if not taf_raw: return "S/D"
+    if not taf_raw: return "Sin información de TAF"
     ahora = datetime.now(timezone.utc)
     ref = ahora.day * 10000 + ahora.hour * 100 + ahora.minute
     cuerpo = re.sub(r'^(TAF\s+)?([A-Z]{4})\s+\d{6}Z\s+', '', taf_raw)
@@ -96,7 +94,7 @@ def obtener_bloque_vigente(taf_raw):
                 vigente = f"{ind} {cont}"
     return vigente.strip()
 
-# --- 4. AUDITORÍA NORMATIVA ---
+# --- 4. AUDITORÍA NORMATIVA (SMN) ---
 
 def auditar_smn(icao, metar, taf_raw):
     alertas = []
@@ -128,14 +126,14 @@ def auditar_smn(icao, metar, taf_raw):
             st.session_state.log_desviaciones.append(entry)
     return alertas, p_vigente
 
-# --- 5. INTERFAZ Y PROCESAMIENTO ---
+# --- 5. PROCESAMIENTO E INTERFAZ ---
 
 st.title("✈️ Vigilancia SAVC: Auditoría SMN & Térmica (TX/TN)")
 
 try:
     headers = {"X-API-Key": API_KEY}
     r_id = random.randint(1, 99999)
-    # Agregamos timeout para evitar que la app se cuelgue si la API no responde
+    # Llamada a la API con protección
     res_metar_raw = requests.get(f"https://api.checkwx.com/metar/{ICAO_STRING}?cache={r_id}", headers=headers, timeout=10).json()
     res_taf_raw = requests.get(f"https://api.checkwx.com/taf/{ICAO_STRING}?cache={r_id}", headers=headers, timeout=10).json()
     
@@ -146,21 +144,21 @@ try:
     reporte_termico = []
 
     for i, icao in enumerate(AERODROMOS):
-        # Buscamos el reporte específico para el aeródromo
+        # Localizamos el reporte específico
         m_r = next((m for m in res_metar if icao in m), None)
         t_r = next((t for t in res_taf if icao in t), None)
         
-        # --- EL PARCHE DE SEGURIDAD (Si la API falla para una estación) ---
+        # --- CONTROL DE DATOS VACÍOS ---
         if not m_r or not t_r:
             with cols[i % 2]:
-                st.error(f"⚠️ {icao}: Sin datos de API (CheckWX)")
+                st.warning(f"⚠️ {icao}: Sin respuesta de API (Verificar SMN)")
             continue
 
         # 1. Auditoría
         alertas, p_vigente = auditar_smn(icao, m_r, t_r)
         status_emoji = "🟥" if alertas else "✅"
         
-        # 2. Procesamiento de Extremas
+        # 2. Extremas y Temperatura Actual
         tx_p, tn_p = extraer_extremas_taf(t_r)
         t_act, h_act = extraer_datos_metar(m_r)
         
@@ -177,7 +175,7 @@ try:
         v_max, v_min = ext.get('max', '--'), ext.get('min', '--')
         h_max, h_min = ext.get('h_max', '--'), ext.get('h_min', '--')
 
-        # 3. Cálculo de Error Térmico
+        # 3. Datos para el Reporte de Tabla
         txt_err_tx = f"{(v_max - tx_p):+d}" if (isinstance(v_max, int) and tx_p is not None) else "-"
         txt_err_tn = f"{(v_min - tn_p):+d}" if (isinstance(v_min, int) and tn_p is not None) else "-"
         
@@ -187,20 +185,20 @@ try:
             "TN Pron.": f"{tn_p}°" if tn_p else "-", "TN Real": f"{v_min}°", "Err TN": txt_err_tn
         })
 
-        # 4. Dashboard Visual
+        # 4. Construcción del Dashboard Visual
         with cols[i % 2]:
             weather_emoji = get_clima_icon(m_r)
             with st.expander(f"{status_emoji} {weather_emoji} {icao}", expanded=True):
-                st.write(f"**Extremas Sesión:** Máx {v_max}° ({h_max}Z) | Mín {v_min}° ({h_min}Z)")
+                st.write(f"**Sesión:** Máx {v_max}° ({h_max}Z) | Mín {v_min}° ({h_min}Z)")
                 st.warning(f"**VIGENTE:** {p_vigente}")
                 for a in alertas: st.error(a)
                 st.success(f"**METAR:** {m_r}")
                 st.text_area(f"TAF {icao}:", t_r, height=80, key=f"t_{icao}")
 
 except Exception as e:
-    st.error(f"Error General de Conexión: {e}")
+    st.error(f"Fallo crítico en la comunicación con el servidor: {e}")
 
-# --- 6. LOGS Y DESCARGAS ---
+# --- 6. LOGS Y EXPORTACIÓN ---
 st.divider()
 c_audit, c_term = st.columns(2)
 
@@ -211,8 +209,8 @@ with c_audit:
         st.dataframe(df_log.tail(10), use_container_width=True)
         out_a = io.BytesIO()
         with pd.ExcelWriter(out_a, engine='xlsxwriter') as wr: df_log.to_excel(wr, index=False)
-        st.download_button("📥 Descargar Log Alertas", out_a.getvalue(), file_name="Log_SMN.xlsx")
-    else: st.info("Sin alertas registradas.")
+        st.download_button("📥 Descargar Log Alertas", out_a.getvalue(), file_name="Log_SMN_Alertas.xlsx")
+    else: st.info("No hay alertas registradas en esta sesión.")
 
 with c_term:
     st.subheader("🌡️ Reporte Térmico (TX/TN)")
@@ -221,9 +219,10 @@ with c_term:
         st.table(df_term)
         out_t = io.BytesIO()
         with pd.ExcelWriter(out_t, engine='xlsxwriter') as wr: df_term.to_excel(wr, index=False)
-        st.download_button("📥 Descargar Reporte TX/TN", out_t.getvalue(), file_name="Reporte_Termico.xlsx")
-    else: st.info("Esperando datos térmicos...")
+        st.download_button("📥 Descargar Reporte TX/TN", out_t.getvalue(), file_name="Reporte_Termico_Mayo.xlsx")
+    else: st.info("Esperando actualización de datos térmicos...")
 
+# Firma y créditos
 st.markdown(f"""<hr><div style="text-align: center; color: #777; font-size: 0.8rem;">
     Desarrollado en colaboración por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>
-    © {datetime.now().year} - Vigilancia Aeronáutica SAVC / HERRAMIENTA PARA AUXILIARES DE PRONOSTICO</div>""", unsafe_allow_html=True)
+    © {datetime.now().year} - Vigilancia Aeronáutica SAVC | HERRAMIENTA DE APOYO PARA PRONOSTICADORES</div>""", unsafe_allow_html=True)
