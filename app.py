@@ -1,69 +1,115 @@
 import streamlit as st
+import pandas as pd
 import datetime
+import requests
+import re
 
-# --- 1. REGISTRO DE USO (Al principio para que marque Mayo) ---
-ahora = datetime.datetime.now()
-if "registro_hecho" not in st.session_state:
-    # Aquí iría tu lógica de guardado en Google Sheets/DB
-    # Al ponerlo acá, se registra el uso apenas abre la app, 
-    # sin importar si los datos del clima fallan después.
-    st.session_state.registro_hecho = True
-    print(f"Uso registrado: {ahora.strftime('%Y-%m-%d %H:%M')}")
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Monitor Meteorológico OVM", layout="wide")
 
-# --- 2. FUNCIÓN DE EXTRACCIÓN PROTEGIDA ---
-# Asegurate de que tu función extraer_datos_metar sea similar a esta
-def extraer_datos_metar_seguro(metar_texto):
+# --- 1. REGISTRO DE USO (Prioridad para que marque Mayo) ---
+def registrar_uso():
+    ahora = datetime.datetime.now()
+    # Aquí puedes insertar tu lógica de Google Sheets si la usas
+    # Por ahora, aseguramos que la sesión lo reconozca
+    if 'usuario_activo' not in st.session_state:
+        st.session_state['usuario_activo'] = True
+    return ahora
+
+fecha_actual = registrar_uso()
+
+# --- 2. FUNCIONES DE EXTRACCIÓN (Con protección contra errores) ---
+def extraer_datos_metar(metar_texto):
     """
-    Extrae datos del METAR sin romper la app si el texto es inválido.
+    Extrae velocidad y resto del METAR. 
+    Retorna SIEMPRE una tupla (velocidad, resto) para evitar el ValueError.
     """
-    if not metar_texto or not isinstance(metar_texto, str):
-        return 0, "S/D" # Retorna valores por defecto
+    if not metar_texto or not isinstance(metar_texto, str) or "404" in metar_texto:
+        return 0, "S/D"
     
     try:
-        # Aquí va tu lógica original de procesamiento/regex
-        # Ejemplo simplificado:
-        # v = extraer_velocidad(metar_texto)
-        # r = extraer_resto(metar_texto)
-        
-        # Simulamos una respuesta exitosa (ajustar a tu lógica real)
-        # return v, r
-        
-        # IMPORTANTE: Si tu lógica actual puede fallar, metela en este try
-        # Para el test, devolvemos una tupla de 2 elementos siempre:
-        return 10, "CAVOK" 
-        
+        # Buscamos el viento (ejemplo: 24015KT o 24015G25KT)
+        match_viento = re.search(r'(\d{3})(\d{2,3})(G\d{2,3})?KT', metar_texto)
+        if match_viento:
+            velocidad = int(match_viento.group(2))
+            return velocidad, metar_texto
+        else:
+            return 0, metar_texto
     except Exception:
         return 0, "Error de formato"
 
-# --- 3. LÓGICA DE VIGILANCIA SAVC (La antigua línea 139) ---
-st.title("Vigilancia Meteorológica SAVC FIR")
+# --- 3. SCRAPER / OBTENCIÓN DE DATOS (Con Timeout) ---
+@st.cache_data(ttl=600)
+def obtener_metar_web(estacion):
+    # Simulamos la consulta a Ogimet o SMN
+    # En producción aquí va tu requests.get(url, timeout=5)
+    try:
+        # Ejemplo: url = f"https://www.ogimet.com/getsynop.php?res=view&icao={estacion}"
+        # response = requests.get(url, timeout=5)
+        # return response.text
+        return f"{estacion} 031800Z 24010KT CAVOK 15/05 Q1013" # Simulación
+    except:
+        return None
 
-# Simulamos la obtención del METAR (metar_c)
-# Si el SMN está caído, metar_c podría ser None o un error 404
-metar_c = "Aquí iría el dato obtenido de la web" 
+# --- 4. INTERFAZ DE STREAMLIT ---
+st.title("🛰️ Monitor de Vigilancia Meteorológica - v4.6")
+st.subheader(f"Estado del FIR: SAVC | Fecha: {fecha_actual.strftime('%d/%m/%Y')}")
 
-# REEMPLAZO DE LA LÍNEA 139:
-try:
-    # Usamos una variable intermedia para testear el resultado
-    resultado = extraer_datos_metar_seguro(metar_c)
+# Sidebar para control y registro
+with st.sidebar:
+    st.header("Control de Sistema")
+    if st.button("🔄 Forzar Recarga (Limpiar Caché)"):
+        st.cache_data.clear()
+        st.rerun()
     
-    # Verificamos que Python pueda desempaquetar 2 valores
-    if isinstance(resultado, (list, tuple)) and len(resultado) >= 2:
-        vel_c, info_extra = resultado[0], resultado[1]
-    else:
-        # Si la función devolvió solo 1 cosa o nada
-        vel_c, info_extra = 0, "Datos incompletos"
+    st.info(f"Mes de gestión: {fecha_actual.strftime('%B %Y')}")
+
+# --- 5. LÓGICA PRINCIPAL (La antigua línea 139 protegida) ---
+tabs = st.tabs(["Vigilancia SAVC", "Auditoría SMN", "Térmicas Tx/Tn"])
+
+with tabs[0]:
+    st.write("### Vigilancia de Estaciones - SAVC")
+    
+    # Lista de estaciones de tu FIR
+    estaciones = ["SAVT", "SAVC", "SAWD", "SAVY"]
+    
+    datos_pantalla = []
+    
+    for oaci in estaciones:
+        metar_c = obtener_metar_web(oaci)
         
-except Exception as e:
-    # Si todo falla, la app no se cierra, solo muestra el error en esa celda
-    st.warning(f"No se pudieron procesar datos para esta estación.")
-    vel_c, info_extra = 0, "N/A"
+        # AQUÍ ESTÁ EL CAMBIO CLAVE (Línea 139 protegida)
+        resultado = extraer_datos_metar(metar_c)
+        
+        # Validación de desempaquetado
+        if isinstance(resultado, (tuple, list)) and len(resultado) >= 2:
+            vel_c, info_extra = resultado
+        else:
+            vel_c, info_extra = 0, "Error en fuente"
+        
+        datos_pantalla.append({
+            "Estación": oaci,
+            "Viento (KT)": vel_c,
+            "Reporte": info_extra
+        })
 
-# --- 4. VISUALIZACIÓN ---
-col1, col2 = st.columns(2)
-col1.metric("Velocidad Viento", f"{vel_c} KT")
-col2.metric("Estado", info_extra)
+    df = pd.DataFrame(datos_pantalla)
+    st.table(df)
 
-if st.sidebar.button("Forzar Recarga de Datos"):
-    st.cache_data.clear()
-    st.rerun()
+with tabs[1]:
+    st.write("### Auditoría SMN vs OACI")
+    st.info("Comparando reportes según MAPROMA...")
+    # Aquí iría tu lógica de comparación de redondeo de viento a la decena
+
+with tabs[2]:
+    st.write("### Análisis de Térmicas")
+    # Lógica para Tx y Tn
+    st.write("Datos de temperaturas extremas para el periodo de mayo.")
+
+# --- 6. REGISTRO DE LOGS (Al final, pero protegido) ---
+try:
+    # Simulación de guardado en log
+    # log_db.save(usuario="Anibal", accion="Consulta", mes=5)
+    pass
+except:
+    st.error("No se pudo actualizar el log de uso de Mayo.")
