@@ -8,14 +8,13 @@ from datetime import datetime, timezone
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Vigilancia SAVC v6.8", page_icon="✈️", layout="wide")
+st.set_page_config(page_title="Vigilancia SAVC v6.9", page_icon="✈️", layout="wide")
 
-# Refresco cada 30 minutos (1,800,000 ms)
+# Refresco cada 30 minutos
 st_autorefresh(interval=1800000, key="auto_refresh")
 
 API_KEY = "8e7917816866402688f805f637eb54d3"
 
-# Segmentación de Aeródromos
 NACIONALES = ["SAVV", "SAVE", "SAVT", "SAWC"]
 INTERNACIONALES = ["SAVC", "SAWG", "SAWE", "SAWH"]
 AERODROMOS = INTERNACIONALES + NACIONALES
@@ -28,6 +27,14 @@ if 'extremas' not in st.session_state:
     st.session_state.extremas = {}
 if 'seleccionados' not in st.session_state:
     st.session_state.seleccionados = set()
+
+# Función para limpiar checkboxes
+def limpiar_todo():
+    st.session_state.seleccionados.clear()
+    # Buscamos todas las keys de checkboxes en el session_state y las ponemos en False
+    for key in st.session_state.keys():
+        if key.startswith("check_"):
+            st.session_state[key] = False
 
 # --- 3. FUNCIONES TÉCNICAS ---
 
@@ -129,7 +136,7 @@ def auditar_smn(icao, metar, taf_raw):
 
 # --- 4. LÓGICA DE PROCESAMIENTO ---
 
-st.title("✈️ Vigilancia SAVC v6.8")
+st.title("✈️ Vigilancia SAVC v6.9")
 
 try:
     headers = {"X-API-Key": API_KEY}
@@ -177,7 +184,9 @@ try:
                     st.code(f"TAF COMPLETO:\n{t_r}", language="markdown")
                     for a in alertas:
                         key_msg = f"{icao}: {a}"
-                        if st.checkbox(f"Avisar: {a}", key=f"check_{icao}_{a[:15]}"):
+                        # Clave única para el checkbox para poder resetearla
+                        cb_key = f"check_{icao}_{a.replace(' ', '_')}"
+                        if st.checkbox(f"Avisar: {a}", key=cb_key):
                             st.session_state.seleccionados.add(key_msg)
                         else:
                             st.session_state.seleccionados.discard(key_msg)
@@ -202,9 +211,9 @@ if st.session_state.seleccionados:
         f"{lista_formateada}"
     )
     st.text_area("Copiar mensaje:", mensaje_final, height=150)
-    if st.button("Limpiar Selecciones"):
-        st.session_state.seleccionados.clear()
-        st.rerun()
+    
+    # Aquí la limpieza con callback
+    st.button("Limpiar Selecciones", on_click=limpiar_todo)
 else:
     st.info("Seleccione las desviaciones en los aeródromos arriba para generar el mensaje automático.")
 
@@ -218,7 +227,7 @@ with c1:
     else: st.info("Sin registros.")
 
 with c2:
-    st.subheader("🌡️ Comparativa Térmica (Mayo 2026)")
+    st.subheader("🌡️ Comparativa Térmica")
     if reporte_termico:
         st.table(pd.DataFrame(reporte_termico))
 
