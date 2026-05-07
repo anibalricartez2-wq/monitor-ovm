@@ -233,5 +233,5 @@ with c2:
 
 # Créditos
 st.markdown(f"""<hr><div style="text-align: center; color: #777; font-size: 0.8rem;">
-    Desarrollado en colaboración por <b>Gemini AI</b> & <b>ANIBAL FERREIRA</b><br>
+    Desarrollado en colaboración por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>
     © {datetime.now().year} - Vigilancia Aeronáutica SAVC | Auxiliares de Pronóstico</div>""", unsafe_allow_html=True)
