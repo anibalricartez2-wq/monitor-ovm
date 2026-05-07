@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Vigilancia SAVC v6.7", page_icon="✈️", layout="wide")
+st.set_page_config(page_title="Vigilancia SAVC v6.8", page_icon="✈️", layout="wide")
 
 # Refresco cada 30 minutos (1,800,000 ms)
 st_autorefresh(interval=1800000, key="auto_refresh")
@@ -62,15 +62,15 @@ def extraer_extremas_taf(taf):
     if not taf: return None, None
     tx = re.search(r'TX(\d{2})/', taf)
     tn = re.search(r'TN(\d{2})/', taf)
-    v_tx = int(tx.group(1)) if tx else None
-    v_tn = int(tn.group(1)) if tn else None
+    v_tx = float(tx.group(1)) if tx else None
+    v_tn = float(tn.group(1)) if tn else None
     return v_tx, v_tn
 
 def extraer_datos_metar(metar):
     if not metar: return None, "--:--"
     t_m = re.search(r'\b(\d{2})/(?:M?\d{2})\b', metar)
     h_m = re.search(r'\d{2}(\d{4})Z', metar)
-    temp = int(t_m.group(1)) if t_m else None
+    temp = float(t_m.group(1)) if t_m else None
     hora = f"{h_m.group(1)[:2]}:{h_m.group(1)[2:]}" if h_m else "--:--"
     return temp, hora
 
@@ -129,7 +129,7 @@ def auditar_smn(icao, metar, taf_raw):
 
 # --- 4. LÓGICA DE PROCESAMIENTO ---
 
-st.title("✈️ Vigilancia SAVC v6.7")
+st.title("✈️ Vigilancia SAVC v6.8")
 
 try:
     headers = {"X-API-Key": API_KEY}
@@ -137,7 +137,6 @@ try:
     res_metar = requests.get(f"https://api.checkwx.com/metar/{ICAO_STRING}?cache={r_id}", headers=headers).json().get('data', [])
     res_taf = requests.get(f"https://api.checkwx.com/taf/{ICAO_STRING}?cache={r_id}", headers=headers).json().get('data', [])
 
-    # Listas para reporte térmico
     reporte_termico = []
 
     def mostrar_grupo(lista_icao, titulo):
@@ -155,7 +154,6 @@ try:
                 alertas, p_vigente = auditar_smn(icao, m_r, t_r)
                 status_emoji = "🟥" if alertas else "✅"
                 
-                # Gestión de extremas
                 t_act, h_act = extraer_datos_metar(m_r)
                 if t_act is not None:
                     if icao not in st.session_state.extremas:
@@ -164,17 +162,20 @@ try:
                         if t_act > st.session_state.extremas[icao]['max']: st.session_state.extremas[icao].update({'max': t_act, 'h_max': h_act})
                         if t_act < st.session_state.extremas[icao]['min']: st.session_state.extremas[icao].update({'min': t_act, 'h_min': h_act})
                 
-                # Preparar datos térmicos para la tabla final
                 ext = st.session_state.extremas.get(icao, {})
                 tx_p, tn_p = extraer_extremas_taf(t_r)
                 reporte_termico.append({
-                    "OACI": icao, "TX Pron": tx_p, "TX Real": ext.get('max'), "TN Pron": tn_p, "TN Real": ext.get('min')
+                    "OACI": icao, 
+                    "TX Pron": f"{tx_p:.1f}°" if tx_p is not None else "-", 
+                    "TX Real": f"{ext.get('max', 0):.1f}°", 
+                    "TN Pron": f"{tn_p:.1f}°" if tn_p is not None else "-", 
+                    "TN Real": f"{ext.get('min', 0):.1f}°"
                 })
 
                 with st.expander(f"{status_emoji} {get_clima_icon(m_r)} {icao}", expanded=True):
-                    st.caption(f"Bloque TAF Vigente: {p_vigente}")
+                    st.write(f"**Periodo Vigente:** `{p_vigente}`")
+                    st.code(f"TAF COMPLETO:\n{t_r}", language="markdown")
                     for a in alertas:
-                        # Checkbox de selección de mensaje
                         key_msg = f"{icao}: {a}"
                         if st.checkbox(f"Avisar: {a}", key=f"check_{icao}_{a[:15]}"):
                             st.session_state.seleccionados.add(key_msg)
@@ -183,14 +184,9 @@ try:
                         st.error(a)
                     st.success(f"METAR: {m_r}")
 
-    # --- PESTAÑAS DE NAVEGACIÓN ---
     tab_inter, tab_nac = st.tabs(["🌎 Internacionales (FT)", "🇦🇷 Nacionales (FC)"])
-    
-    with tab_inter:
-        mostrar_grupo(INTERNACIONALES, "Terminales Internacionales")
-    
-    with tab_nac:
-        mostrar_grupo(NACIONALES, "Terminales Nacionales")
+    with tab_inter: mostrar_grupo(INTERNACIONALES, "Terminales Internacionales")
+    with tab_nac: mostrar_grupo(NACIONALES, "Terminales Nacionales")
 
 except Exception as e:
     st.error(f"Error de sistema: {e}")
@@ -222,7 +218,7 @@ with c1:
     else: st.info("Sin registros.")
 
 with c2:
-    st.subheader("🌡️ Comparativa Térmica")
+    st.subheader("🌡️ Comparativa Térmica (Mayo 2026)")
     if reporte_termico:
         st.table(pd.DataFrame(reporte_termico))
 
