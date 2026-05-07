@@ -8,25 +8,28 @@ from datetime import datetime, timezone
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Vigilancia SAVC v6.6", page_icon="✈️", layout="wide")
+st.set_page_config(page_title="Vigilancia SAVC v6.7", page_icon="✈️", layout="wide")
 
-# Refresco cada 3 minutos (180,000 ms) para mantener los datos al día
-st_autorefresh(interval=18000000, key="auto_refresh")
+# Refresco cada 30 minutos (1,800,000 ms)
+st_autorefresh(interval=1800000, key="auto_refresh")
 
 API_KEY = "8e7917816866402688f805f637eb54d3"
-# Tu lista exacta de 8 aeródromos
-AERODROMOS = ["SAVV", "SAVE", "SAVT", "SAWC", "SAVC", "SAWG", "SAWE", "SAWH"]
+
+# Segmentación de Aeródromos
+NACIONALES = ["SAVV", "SAVE", "SAVT", "SAWC"]
+INTERNACIONALES = ["SAVC", "SAWG", "SAWE", "SAWH"]
+AERODROMOS = INTERNACIONALES + NACIONALES
 ICAO_STRING = ",".join(AERODROMOS)
 
-# --- 2. MEMORIA DE SESIÓN (Persistencia de Logs y Registro de Mayo) ---
+# --- 2. MEMORIA DE SESIÓN ---
 if 'log_desviaciones' not in st.session_state:
     st.session_state.log_desviaciones = []
 if 'extremas' not in st.session_state:
     st.session_state.extremas = {}
-if 'registro_mayo_anibal' not in st.session_state:
-    st.session_state.registro_mayo_anibal = True
+if 'seleccionados' not in st.session_state:
+    st.session_state.seleccionados = set()
 
-# --- 3. FUNCIONES TÉCNICAS (Con blindaje ante datos nulos) ---
+# --- 3. FUNCIONES TÉCNICAS ---
 
 def calcular_dif_angular(dir1, dir2):
     if dir1 is None or dir2 is None: return 0
@@ -50,10 +53,10 @@ def get_cloud_ceiling(texto):
     return 10000
 
 def get_wind_data(texto):
-    if not texto: return None, None
+    if not texto: return None, 0
     m = re.search(r'(\d{3})(\d{2})(G\d{2})?KT', texto)
     if m: return int(m.group(1)), int(m.group(2))
-    return None, None
+    return None, 0
 
 def extraer_extremas_taf(taf):
     if not taf: return None, None
@@ -95,12 +98,9 @@ def obtener_bloque_vigente(taf_raw):
                 vigente = f"{ind} {cont}"
     return vigente.strip()
 
-# --- 4. AUDITORÍA NORMATIVA (SMN) ---
-
 def auditar_smn(icao, metar, taf_raw):
     alertas = []
     p_vigente = obtener_bloque_vigente(taf_raw)
-    
     dm, vm_v = get_wind_data(metar)
     dp, vp_v = get_wind_data(p_vigente)
     
@@ -127,103 +127,106 @@ def auditar_smn(icao, metar, taf_raw):
             st.session_state.log_desviaciones.append(entry)
     return alertas, p_vigente
 
-# --- 5. PROCESAMIENTO E INTERFAZ ---
+# --- 4. LÓGICA DE PROCESAMIENTO ---
 
-st.title("✈️ Vigilancia SAVC: Auditoría SMN & Térmica")
+st.title("✈️ Vigilancia SAVC v6.7")
 
 try:
     headers = {"X-API-Key": API_KEY}
     r_id = random.randint(1, 99999)
-    # Intentamos conectar con la API (CheckWX)
-    res_metar_raw = requests.get(f"https://api.checkwx.com/metar/{ICAO_STRING}?cache={r_id}", headers=headers, timeout=12).json()
-    res_taf_raw = requests.get(f"https://api.checkwx.com/taf/{ICAO_STRING}?cache={r_id}", headers=headers, timeout=12).json()
-    
-    res_metar = res_metar_raw.get('data', [])
-    res_taf = res_taf_raw.get('data', [])
+    res_metar = requests.get(f"https://api.checkwx.com/metar/{ICAO_STRING}?cache={r_id}", headers=headers).json().get('data', [])
+    res_taf = requests.get(f"https://api.checkwx.com/taf/{ICAO_STRING}?cache={r_id}", headers=headers).json().get('data', [])
 
-    cols = st.columns(2)
+    # Listas para reporte térmico
     reporte_termico = []
 
-    for i, icao in enumerate(AERODROMOS):
-        # Buscamos el reporte específico
-        m_r = next((m for m in res_metar if icao in m), None)
-        t_r = next((t for t in res_taf if icao in t), None)
-        
-        # --- BLINDAJE CONTRA RESPUESTA VACÍA ---
-        if not m_r or not t_r:
-            with cols[i % 2]:
-                st.warning(f"⚠️ {icao}: Sin respuesta de API (Verificar SMN)")
-            continue
+    def mostrar_grupo(lista_icao, titulo):
+        st.header(titulo)
+        cols = st.columns(2)
+        for idx, icao in enumerate(lista_icao):
+            m_r = next((m for m in res_metar if icao in m), None)
+            t_r = next((t for t in res_taf if icao in t), None)
+            
+            with cols[idx % 2]:
+                if not m_r or not t_r:
+                    st.warning(f"⚠️ {icao}: Sin respuesta")
+                    continue
+                
+                alertas, p_vigente = auditar_smn(icao, m_r, t_r)
+                status_emoji = "🟥" if alertas else "✅"
+                
+                # Gestión de extremas
+                t_act, h_act = extraer_datos_metar(m_r)
+                if t_act is not None:
+                    if icao not in st.session_state.extremas:
+                        st.session_state.extremas[icao] = {'max': t_act, 'h_max': h_act, 'min': t_act, 'h_min': h_act}
+                    else:
+                        if t_act > st.session_state.extremas[icao]['max']: st.session_state.extremas[icao].update({'max': t_act, 'h_max': h_act})
+                        if t_act < st.session_state.extremas[icao]['min']: st.session_state.extremas[icao].update({'min': t_act, 'h_min': h_act})
+                
+                # Preparar datos térmicos para la tabla final
+                ext = st.session_state.extremas.get(icao, {})
+                tx_p, tn_p = extraer_extremas_taf(t_r)
+                reporte_termico.append({
+                    "OACI": icao, "TX Pron": tx_p, "TX Real": ext.get('max'), "TN Pron": tn_p, "TN Real": ext.get('min')
+                })
 
-        # 1. Auditoría
-        alertas, p_vigente = auditar_smn(icao, m_r, t_r)
-        status_emoji = "🟥" if alertas else "✅"
-        
-        # 2. Extremas y Temperatura Actual
-        tx_p, tn_p = extraer_extremas_taf(t_r)
-        t_act, h_act = extraer_datos_metar(m_r)
-        
-        if t_act is not None:
-            if icao not in st.session_state.extremas:
-                st.session_state.extremas[icao] = {'max': t_act, 'h_max': h_act, 'min': t_act, 'h_min': h_act}
-            else:
-                if t_act > st.session_state.extremas[icao]['max']:
-                    st.session_state.extremas[icao].update({'max': t_act, 'h_max': h_act})
-                if t_act < st.session_state.extremas[icao]['min']:
-                    st.session_state.extremas[icao].update({'min': t_act, 'h_min': h_act})
-        
-        ext = st.session_state.extremas.get(icao, {})
-        v_max, v_min = ext.get('max', '--'), ext.get('min', '--')
-        h_max, h_min = ext.get('h_max', '--'), ext.get('h_min', '--')
+                with st.expander(f"{status_emoji} {get_clima_icon(m_r)} {icao}", expanded=True):
+                    st.caption(f"Bloque TAF Vigente: {p_vigente}")
+                    for a in alertas:
+                        # Checkbox de selección de mensaje
+                        key_msg = f"{icao}: {a}"
+                        if st.checkbox(f"Avisar: {a}", key=f"check_{icao}_{a[:15]}"):
+                            st.session_state.seleccionados.add(key_msg)
+                        else:
+                            st.session_state.seleccionados.discard(key_msg)
+                        st.error(a)
+                    st.success(f"METAR: {m_r}")
 
-        # 3. Datos para el Reporte de Tabla
-        txt_err_tx = f"{(v_max - tx_p):+d}" if (isinstance(v_max, int) and tx_p is not None) else "-"
-        txt_err_tn = f"{(v_min - tn_p):+d}" if (isinstance(v_min, int) and tn_p is not None) else "-"
-        
-        reporte_termico.append({
-            "OACI": icao,
-            "TX Pron.": f"{tx_p}°" if tx_p else "-", "TX Real": f"{v_max}°", "Err TX": txt_err_tx,
-            "TN Pron.": f"{tn_p}°" if tn_p else "-", "TN Real": f"{v_min}°", "Err TN": txt_err_tn
-        })
-
-        # 4. Dashboard Visual (Expander)
-        with cols[i % 2]:
-            weather_emoji = get_clima_icon(m_r)
-            with st.expander(f"{status_emoji} {weather_emoji} {icao}", expanded=True):
-                st.write(f"**Sesión:** Máx {v_max}° ({h_max}Z) | Mín {v_min}° ({h_min}Z)")
-                st.warning(f"**VIGENTE:** {p_vigente}")
-                for a in alertas: st.error(a)
-                st.success(f"**METAR:** {m_r}")
-                st.text_area(f"TAF {icao}:", t_r, height=80, key=f"t_{icao}")
+    # --- PESTAÑAS DE NAVEGACIÓN ---
+    tab_inter, tab_nac = st.tabs(["🌎 Internacionales (FT)", "🇦🇷 Nacionales (FC)"])
+    
+    with tab_inter:
+        mostrar_grupo(INTERNACIONALES, "Terminales Internacionales")
+    
+    with tab_nac:
+        mostrar_grupo(NACIONALES, "Terminales Nacionales")
 
 except Exception as e:
-    st.error(f"Error General: No se pudieron obtener datos. Verifique conexión.")
+    st.error(f"Error de sistema: {e}")
+
+# --- 5. GENERADOR DE MENSAJE ---
+st.divider()
+st.subheader("✉️ Generador de Mensaje para Pronóstico")
+if st.session_state.seleccionados:
+    lista_formateada = "\n".join([f"- {item}" for item in sorted(st.session_state.seleccionados)])
+    mensaje_final = (
+        "Le envío las siguientes desviaciones que detectamos para que, "
+        "a su criterio, evalúe la enmienda de los siguientes aeródromos:\n\n"
+        f"{lista_formateada}"
+    )
+    st.text_area("Copiar mensaje:", mensaje_final, height=150)
+    if st.button("Limpiar Selecciones"):
+        st.session_state.seleccionados.clear()
+        st.rerun()
+else:
+    st.info("Seleccione las desviaciones en los aeródromos arriba para generar el mensaje automático.")
 
 # --- 6. LOGS Y REPORTES ---
 st.divider()
-c_audit, c_term = st.columns(2)
-
-with c_audit:
-    st.subheader("📋 Log SMN (Viento/Vis/Nub)")
+c1, c2 = st.columns(2)
+with c1:
+    st.subheader("📋 Log de Desviaciones")
     if st.session_state.log_desviaciones:
-        df_log = pd.DataFrame(st.session_state.log_desviaciones)
-        st.dataframe(df_log.tail(10), use_container_width=True)
-        out_a = io.BytesIO()
-        with pd.ExcelWriter(out_a, engine='xlsxwriter') as wr: df_log.to_excel(wr, index=False)
-        st.download_button("📥 Descargar Log Alertas", out_a.getvalue(), file_name="Log_SMN_Alertas.xlsx")
-    else: st.info("No hay alertas registradas en esta sesión.")
+        st.dataframe(pd.DataFrame(st.session_state.log_desviaciones).tail(10), use_container_width=True)
+    else: st.info("Sin registros.")
 
-with c_term:
-    st.subheader("🌡️ Reporte Térmico (TX/TN)")
+with c2:
+    st.subheader("🌡️ Comparativa Térmica")
     if reporte_termico:
-        df_term = pd.DataFrame(reporte_termico)
-        st.table(df_term)
-        out_t = io.BytesIO()
-        with pd.ExcelWriter(out_t, engine='xlsxwriter') as wr: df_term.to_excel(wr, index=False)
-        st.download_button("📥 Descargar Reporte TX/TN", out_t.getvalue(), file_name="Reporte_Termico.xlsx")
-    else: st.info("Esperando datos térmicos de mayo...")
+        st.table(pd.DataFrame(reporte_termico))
 
 # Créditos
 st.markdown(f"""<hr><div style="text-align: center; color: #777; font-size: 0.8rem;">
-    Desarrollado en colaboración por <b>Gemini AI</b> & <b>ANIBAL RICARTEZ</b><br>
-    © {datetime.now().year} - Vigilancia Aeronáutica SAVC | HERRAMIENTA DISEÑADA PARA AUXILIARES DE PRONOSTICO</div>""", unsafe_allow_html=True)
+    Desarrollado en colaboración por <b>Gemini AI</b> & <b>ANIBAL FERREIRA</b><br>
+    © {datetime.now().year} - Vigilancia Aeronáutica SAVC | Auxiliares de Pronóstico</div>""", unsafe_allow_html=True)
