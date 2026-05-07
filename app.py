@@ -206,8 +206,8 @@ st.subheader("✉️ Generador de Mensaje para Pronóstico")
 if st.session_state.seleccionados:
     lista_formateada = "\n".join([f"- {item}" for item in sorted(st.session_state.seleccionados)])
     mensaje_final = (
-        "Le envío las siguientes desviaciones que detectamos para que, "
-        "a su criterio, evalúe la enmienda de los siguientes aeródromos:\n\n"
+        "Le envío las siguientes desviaciones que detectamos de los siguientes aeródromos:\n\n "
+         
         f"{lista_formateada}"
     )
     st.text_area("Copiar mensaje:", mensaje_final, height=150)
